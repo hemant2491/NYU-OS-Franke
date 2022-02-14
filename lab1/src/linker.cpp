@@ -13,6 +13,9 @@ enum PASS_TYPE {PASS_ONE, PASS_TWO};
 enum ADDR_MODE {RELATIVE, EXTERNAL, IMMEDIATE, ABSOLUTE, ERROR};
 map<string, int> symbolMap;
 string INPUT_FILE = "";
+ifstream fin;
+string line;
+// char fileArray [] = {};
 
 struct Token
 {
@@ -35,9 +38,53 @@ ostream& operator<<(ostream& os, const Token& token) {
 }
 
 
-string getToken()
+void ReadFileToArray()
 {
-    return "token";
+  fin.open(INPUT_FILE.c_str());
+  // while (fin) 
+  // {
+  //     // Read a line from input file
+  //     getline(fin, line);
+  //     cout << line << endl;
+
+  // }
+  // t.open("file.txt");      // open input file
+  fin.seekg(0, std::ios::end);    // go to the end
+  int length = fin.tellg();           // report location (this is the length)
+  fin.seekg(0, std::ios::beg);    // go back to the beginning
+  char fileArray [length];    // allocate memory for a buffer of appropriate dimension
+  fin.read(fileArray, length);       // read the whole file into the buffer
+  fin.close();
+
+  char* tokenString = strtok(fileArray, " \t\n");
+      
+  while (tokenString != NULL)
+  {
+    printf ("'%s'\n",tokenString);
+    tokenString = strtok (NULL, " \t\n");
+  }
+
+}
+
+Token getToken()
+{
+    
+    if (fin) {
+      // Read a line from input file
+      getline(fin, line);
+
+      char line_cstr[line.length() + 1];
+      strcpy(line_cstr, line.c_str());
+      char* tokenString = strtok(line_cstr, " \t\n");
+      
+      cout << line << endl;
+      while (tokenString != NULL)
+      {
+        printf ("'%s'\n",tokenString);
+        tokenString = strtok (NULL, " \t\n");
+      }
+    } 
+    
 }
 
 int readInt()
@@ -71,7 +118,15 @@ pair<ADDR_MODE, string> readIAER()
 
 void ParseInput(PASS_TYPE passNum)
 {
-    // getToken
+    
+
+    while(fin)
+    {
+      Token t1 = getToken();
+    }
+
+    // Close input file
+    fin.close();
 }
 
 int main (int argc, char** argv)
@@ -90,27 +145,7 @@ int main (int argc, char** argv)
 
     printf("Input file name: %s\n", INPUT_FILE.c_str());
 
-    ifstream fin;
-    fin.open(INPUT_FILE.c_str());
-    string line;
-    while (fin) {
-      // Read a line from input file
-      getline(fin, line);
-
-      char line_cstr[line.length() + 1];
-      strcpy(line_cstr, line.c_str());
-      char* sToken = strtok(line_cstr, " \t\n");
-      
-      cout << line << endl;
-      while (sToken != NULL)
-      {
-        printf ("'%s'\n",sToken);
-        sToken = strtok (NULL, " \t\n");
-      }
-
-    }
-    // Close input file
-    fin.close();
+    ReadFileToArray();
 
     // Parse for Symbol Map i.e. first pass
     ParseInput(PASS_ONE);
