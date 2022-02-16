@@ -78,6 +78,7 @@ map<int, string> HasError3;
 // vector<int> HasError11;
 map<int,int> HasInstructionError;
 map<int, string> InstructionErrorStrings;
+map<int,vector<string>> moduleToUnusedSymbols;
 
 
 
@@ -213,7 +214,7 @@ char ReadIARE()
     } */
 }
 
-void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usecount, vector<string> moduleUseList)
+void ReadInstructions(PASS_TYPE passNum, int moduleNumber, int moduleBase, int instcount, int usecount, vector<string> moduleUseList)
 {
   /* cout << "DEBUG LOG: pass " << passNum << " module base " << moduleBase
        << " inst count " << instcount << " use count " << usecount << endl;
@@ -223,6 +224,7 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
     cout << " " << sym; 
   }
   cout << "}" << endl; */
+  vector<string> symbolsUsedInModule;
   for (int i=0; i<instcount; i++)
   {
     char addressmode = ReadIARE();
@@ -279,6 +281,7 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
           else
           {
             string usedSym = moduleUseList[operand];
+            symbolsUsedInModule.push_back(usedSym);
             // Rule 3 check
             if (symbolDefinedToModule.find(usedSym) == symbolDefinedToModule.end())
             {
@@ -354,6 +357,20 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
       //Perform pass1 checks
     }
   }
+
+  if (passNum == PASS_TWO)
+  {
+    for (string sym: moduleUseList)
+    {
+      if(find(symbolsUsedInModule.begin(), symbolsUsedInModule.end(), sym) == symbolsUsedInModule.end())
+      {
+        if (find(moduleToUnusedSymbols[moduleNumber].begin(), moduleToUnusedSymbols[moduleNumber].end(), sym) == moduleToUnusedSymbols[moduleNumber].end())
+        {
+          moduleToUnusedSymbols[moduleNumber].push_back(sym);
+        }
+      }
+    }
+  }
 }
 
 void ParseInput(PASS_TYPE passNum, char* inputFile)
@@ -421,7 +438,7 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
       }
       // cout << "DEBUG LOG: Reading " << instcount << " instructions." << endl;
       
-      ReadInstructions(passNum, moduleBase, instcount, usecount, moduleUseList);
+      ReadInstructions(passNum, moduleCount, moduleBase, instcount, usecount, moduleUseList);
       moduleBase += instcount;
     }
     
@@ -465,7 +482,24 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
           printf("%03d: %d\n", i, instructions[i]);
         }
       }
-      // Rule 4 check
+      // Check Rule 5
+
+      // Check Rule 7
+      if (!moduleToUnusedSymbols.empty())
+      {
+        for (int i = 1; i <= moduleCount; i++)
+        {
+          if(moduleToUnusedSymbols.find(i) != moduleToUnusedSymbols.end())
+          {
+            for (string sym : moduleToUnusedSymbols[i])
+            {
+              printf("Warning: Module %d: %s appeared in the uselist but was not actually used\n", i, sym.c_str());
+            }
+          }
+        }
+      }
+      
+      // Check Rule 4
       std::stringstream  errorString4;
       bool errorFound4;
       for(pair<string, int> p : symbols)
