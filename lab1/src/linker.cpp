@@ -50,6 +50,7 @@ ostream& operator<<(ostream& os, const Token& token) {
               << " : " << token.value;
 }
 
+const string ERROR_STRING_2 = "Error: This variable is multiple times defined; first value used";
 
 // string INPUT_FILE = "";
 ifstream fin;
@@ -64,9 +65,21 @@ vector<Token> tokens;
 vector<Token>::iterator tokenItr;
 vector<pair<string, int>> symbols;
 vector<int> moduleLengths;
-vector<string> instructions;
+vector<int> instructions;
 vector<string> allUsedSymbols;
 map<string,int> symbolDefinedToModule;
+map<string, string> symbolToError2;
+vector<string> HasError2;
+map<int, string> HasError3;
+// vector<int> HasError6;
+// vector<int> HasError8;
+// vector<int> HasError9;
+// vector<int> HasError10;
+// vector<int> HasError11;
+map<int,int> HasInstructionError;
+map<int, string> InstructionErrorStrings;
+
+
 
 
 // Method to print char array
@@ -79,6 +92,16 @@ void PrintCharArray(char* char_arr)
     }
     cout << endl;
 }
+
+void InitializeErrorStrings()
+{
+  InstructionErrorStrings[6] = "Error: External address exceeds length of uselist; treated as immediate";
+  InstructionErrorStrings[8] = "Error: Absolute address exceeds machine size; zero used";
+  InstructionErrorStrings[9] = "Error: Relative address exceeds module size; zero used";
+  InstructionErrorStrings[10] = "Error: Illegal immediate value; treated as 9999";
+  InstructionErrorStrings[11] = "Error: Illegal opcode; treated as 9999";
+}
+
 
 // Read input file and create Tokens
 void CreateTokens(PASS_TYPE passNum, char* inputFile)
@@ -212,13 +235,23 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
       // cout << "DEBUG LOG: Instruction addr type " << addressmode << " opcode " << opcode << " operand " << operand << endl;
                 // various checks
                 //  - “ -
+
+      // bool error6 = false;
+      // bool error8 = false;
+      // bool error9 = false;
+      // bool error10 = false;
+      // bool error11 = false;
       switch(addressmode)
       {
         case 'I':
           // cout << "DEBUG LOG: case I" << endl;
+          // Rule 10
           if(instr>9999)
           {
-            errorString = " Error: Illegal opcode; treated as 9999";
+            // errorString = " Error: Illegal immediate value; treated as 9999";
+            // error10 =  true;
+            // HasError10.push_back(i+moduleBase);
+            HasInstructionError[i+moduleBase] = 10;
             operand = 999;
             opcode = 9;
           }
@@ -227,7 +260,10 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
           // cout << "DEBUG LOG: case B" << endl;
           if (operand>511)
           {
-            errorString = " Error: Absolute address exceeds machine size; zero used";
+            // errorString = " Error: Absolute address exceeds machine size; zero used";
+            // error8 = true;
+            // HasError8.push_back(i+moduleBase);
+            HasInstructionError[i+moduleBase] = 8;
             operand = 0;
           }
           break;
@@ -235,11 +271,21 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
           // cout << "DEBUG LOG: case E" << endl;
           if (operand>usecount-1)
           {
-            errorString = " Error: External address exceeds length of uselist; treated as immediate";
+            // errorString = " Error: External address exceeds length of uselist; treated as immediate";
+            // error6 = true;
+            // HasError6.push_back(i+moduleBase);
+            HasInstructionError[i+moduleBase] = 6;
           }
           else
           {
             string usedSym = moduleUseList[operand];
+            // Rule 3 check
+            if (symbolDefinedToModule.find(usedSym) == symbolDefinedToModule.end())
+            {
+              HasError3[i+moduleBase] = usedSym;
+              operand = 0;
+              break;
+            }
             for (pair<string, int> p : symbols)
             {
               if (p.first  == usedSym)
@@ -252,15 +298,22 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
           break;
         case 'R':
           // cout << "DEBUG LOG: case R" << endl;
+          // Rule 11
           if(instr>9999)
           {
-            errorString = " Error: Illegal opcode; treated as 9999";
+            // errorString = " Error: Illegal opcode; treated as 9999";
+            // error11 =  true;
+            // HasError11.push_back(i+moduleBase);
+            HasInstructionError[i+moduleBase] = 11;
             operand = 999;
             opcode = 9;
           }
           else if(operand>instcount)
           {
-            errorString = " Error: Relative address exceeds module size; zero used";
+            // errorString = " Error: Relative address exceeds module size; zero used";
+            // error9 = true;
+            // HasError9.push_back(i+moduleBase);
+            HasInstructionError[i+moduleBase] = 9;
             operand=moduleBase;
           }
           else
@@ -274,13 +327,14 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
       int index = moduleBase+i;
       // char indexCharArray[7];
       // snprintf (indexCharArray, 7, "%05d", index);
-      std::stringstream ss;
+      /* std::stringstream ss;
       ss << std::setw(3) << std::setfill('0') << index;
       ss << setfill(' ');
-      std::string indexString = ss.str();
+      std::string indexString = ss.str(); */
 
       int tmpInstr = opcode*1000 + operand;
-      string instructionString;
+
+      /* string instructionString;
       if (errorString.empty())
       {
         instructionString = indexString + ": " + to_string(tmpInstr);
@@ -288,10 +342,11 @@ void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usec
       else
       {
        instructionString = indexString + ": " + to_string(tmpInstr) + errorString; 
-      }
+      } */
       // string instructionString = string(indexCharArray) + ": " + to_string(tmpInstr) + errorString;
       // string instructionString = indexString + ": " + to_string(tmpInstr) + errorMessage;
-      instructions.push_back(instructionString);
+      // instructions.push_back(instructionString);
+      instructions.push_back(tmpInstr);
     }
     if (passNum == PASS_ONE)
     {
@@ -331,8 +386,18 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
         // createSymbol(sym,val);
         if (passNum == PASS_ONE)
         {
-          symbols.push_back(make_pair(sym, val+moduleBase));
-          symbolDefinedToModule[sym] = moduleCount;
+          if(symbolDefinedToModule.find(sym) != symbolDefinedToModule.end())
+          {
+            // std::stringstream  errorString2;
+            // errorString2 << "Error: This variable is multiple times defined; first value used";
+            // symbolToError2[sym] = errorString2.str();
+            HasError2.push_back(sym);
+          }
+          else
+          {
+            symbols.push_back(make_pair(sym, val+moduleBase));
+            symbolDefinedToModule[sym] = moduleCount;
+          }
         }
       }
 
@@ -366,16 +431,39 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
       cout << "Symbol Table" << endl;
       for(pair<string, int> p : symbols)
       {
-        cout << p.first << "=" << p.second << endl;
+        //Rule 2 check
+        if (find(HasError2.begin(), HasError2.end(), p.first) != HasError2.end())
+        {
+          cout << p.first << "=" << p.second << " " << ERROR_STRING_2  << endl;
+        }
+        else
+        {
+          cout << p.first << "=" << p.second << endl;
+        }
       }
       cout << endl;
     }
     else
     {
       cout << "Memory Map" << endl;
-      for(string instr : instructions)
+      // for(string instr : instructions)
+      // {
+      //   cout << instr << endl;
+      // }
+      for(int i=0; i < instructions.size(); i++)
       {
-        cout << instr << endl;
+        if (HasError3.find(i) != HasError3.end())
+        {
+          printf("%03d: %d Error: %s is not defined; zero used\n", i, instructions[i], HasError3[i].c_str());
+        }
+        else if(HasInstructionError.find(i) != HasInstructionError.end())
+        {
+          printf("%03d: %d %s\n", i, instructions[i], InstructionErrorStrings[HasInstructionError[i]].c_str());
+        }
+        else
+        {
+          printf("%03d: %d\n", i, instructions[i]);
+        }
       }
       // Rule 4 check
       std::stringstream  errorString4;
@@ -400,19 +488,7 @@ int main (int argc, char** argv)
 //     int num = 5;
 //     printf("The answer is %05d.\n", num);
 
-    // Read input file name from the command line arguments
-    // if (argc < 2 || argv[1] == "")
-    // {
-    //   cout << "Fail: Provide input file name as program argument." << endl;
-    //   exit(1);
-    // }
-
-    // INPUT_FILE = string(argv[1]);
-
-    // printf("Input file name: %s\n", INPUT_FILE.c_str());
-    // cout << "Input file name: " << argv[1] << endl;
-
-    // fileArrayPtr = ReadFileToArray();
+    InitializeErrorStrings();
 
     // Parse for Symbol Map i.e. first pass
     ParseInput(PASS_ONE, argv[1]);
