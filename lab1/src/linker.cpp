@@ -4,24 +4,17 @@
 #include <string.h>
 #include <fstream>
 #include <map>
+#include <vector>
+#include <sstream>
+#include <iomanip>
 // #include <getopt.h>
 // #include <fmt/format.h>
-#include <unistd.h>
+// #include <unistd.h>
 
 using namespace std;
 
 enum PASS_TYPE {PASS_ONE, PASS_TWO};
 enum ADDR_MODE {RELATIVE, EXTERNAL, IMMEDIATE, ABSOLUTE, ERROR};
-map<string, int> symbolMap;
-// string INPUT_FILE = "";
-ifstream fin;
-string line = "";
-char* lineCharArray = NULL;
-char* tokenString = NULL;
-int lineNumber = 0;
-int offset = 0;
-int moduleNumber = 0;
-// char* fileArrayPtr = NULL;
 
 struct Token
 {
@@ -56,49 +49,96 @@ ostream& operator<<(ostream& os, const Token& token) {
               << " : " << token.value;
 }
 
-// Read next line from the input file into a char array: lineCharArray
-void ReadNextLineToCharArray()
+
+// string INPUT_FILE = "";
+ifstream fin;
+string line;
+char* lineCharArray = NULL;
+char* tokenString = NULL;
+int lineNumber = 0;
+int offset = -1;
+int moduleNumber = 0;
+char DELIMS[3] = {' ', '\t', '\n'};
+vector<Token> tokens;
+vector<Token>::iterator tokenItr;
+vector<pair<string, int>> symbols;
+vector<int> moduleLengths;
+vector<string> instructions;
+
+
+// Method to print char array
+void PrintCharArray(char* char_arr)
 {
-  if (fin.peek() != EOF)
-  {
-    line = "";
-    getline(fin, line);
-    //To-do: check empty line, use trim, maybe handled in getToken
-    lineNumber++;
-    offset = 0;
-    char tempArray[line.length() + 1];
-    lineCharArray = tempArray;
-    strcpy(lineCharArray, line.c_str());
-  }
+    cout << "char array: ";
+    for (int i = 0; i< strlen(char_arr); i++)
+    {
+    cout << char_arr[i];
+    }
+    cout << endl;
 }
 
-// Get next token from last read line
-Token GetToken()
+// Read input file and create Tokens
+void CreateTokens(PASS_TYPE passNum, char* inputFile)
 {
-  if(fin.peek() != EOF)
+  tokens.clear();
+  try
   {
-    if(lineNumber == 0)
+    // cout << "DEBUG LOG: opening file for reading: " << inputFile << endl;
+    fin.open(inputFile);
+    // cout << "DEBUG LOG: input file opened for reading." << endl;
+  }
+  catch(std::exception const& e)
+  {
+    if(passNum == PASS_ONE)
     {
-      ReadNextLineToCharArray();
-      tokenString = strtok(lineCharArray, " \t\n");
+      cout << "There was an error in opening input file " << inputFile << ": " << e.what() << endl;
+      return;
     }
     else
     {
-      tokenString = strtok(NULL, " \t\n");
+      exit(1);
     }
+  }
 
-    if (tokenString == NULL)
+  // cout << "DEBUG LOG: Creating tokens" << endl;
+  string line;
+  while (fin) {
+    lineNumber++;
+    offset = -1;
+    // Read a line from input file
+    getline(fin, line);
+
+    char line_cstr[line.length() + 1];
+    strcpy(line_cstr, line.c_str());
+    // PrintCharArray(line_cstr);
+    char* tokenString = strtok(line_cstr, DELIMS);
+    
+    // // cout << "DEBUG LOG: line: " << line << endl;
+    while (tokenString != NULL)
     {
-      while(tokenString == NULL)
-      {
-        ReadNextLineToCharArray();
-        tokenString = strtok (lineCharArray, " \t\n");
-      }
+      // printf ("'%s'\n",tokenString);
+      offset = line.find(tokenString, offset+1);
+      Token t1 = Token(tokenString, lineNumber, offset+1);
+      tokens.push_back(t1);
+      // PrintCharArray(line_cstr);
+      tokenString = strtok (NULL, DELIMS);      
+      // // cout << "DEBUG LOG: " << t1 << endl;
     }
+  }
+  // Close input file
+  fin.close();
+  tokenItr = tokens.begin();
+}
 
-    offset = line.find(tokenString);
-
-    return Token(tokenString, lineNumber, offset);
+// Get next token
+Token GetToken()
+{
+  if (tokenItr != tokens.end())
+  {
+    Token t1 = *tokenItr;
+    tokenItr++;
+    // tokens.erase(tokens.begin());
+    return t1;
   }
   else
   {
@@ -109,13 +149,14 @@ Token GetToken()
 int ReadInt()
 {
   Token intToken = GetToken();
-  cout << intToken << endl;
+  // cout << "DEBUG LOG: " << intToken << endl;
   return stoi(intToken.value);
 }
 
 string ReadSymbol()
 {
   Token symbolToken = GetToken();
+  // cout << "DEBUG LOG: " << symbolToken << endl;
   return symbolToken.value;
 }
 
@@ -127,6 +168,7 @@ char ReadIARE()
     string errorString = "";
     // To-do: check length of token value
     Token IAREToken = GetToken();
+    // cout << "DEBUG LOG: " << IAREToken << endl;
     iare = IAREToken.value.front();
     return iare;
     /* switch(iare)
@@ -145,109 +187,212 @@ char ReadIARE()
     } */
 }
 
-void ParseInput(PASS_TYPE passNum, char* inputFile)
+void ReadInstructions(PASS_TYPE passNum, int moduleBase, int instcount, int usecount, vector<string> moduleUseList)
 {
-    
-    cout << "LOG: Parse Input" << endl;
-    if (passNum == PASS_ONE)
+  /* cout << "DEBUG LOG: pass " << passNum << " module base " << moduleBase
+       << " inst count " << instcount << " use count " << usecount << endl;
+  cout << " DEBUG LOG: Use List - {";
+  for (string sym : moduleUseList)
+  {
+    cout << " " << sym; 
+  }
+  cout << "}" << endl; */
+  for (int i=0; i<instcount; i++)
+  {
+    char addressmode = ReadIARE();
+    int  instr = ReadInt();
+    if (passNum == PASS_TWO)
     {
-      printf("Symbol Table\n");
-    }
-    else
-    {
-      printf("Memory Map\n");
-    }
-
-    /* try
-    {
-      cout << "LOG: opening file for reading: " << inputFile << endl;
-      fin.open(inputFile);
-      cout << "LOG: input file opened for reading." << endl;
-    }
-    catch(std::exception const& e)
-    {
-      if(passNum == PASS_ONE)
+      string errorString;
+      int opcode = instr/1000;
+      int operand = instr%1000;
+      // cout << "DEBUG LOG: Instruction addr type " << addressmode << " opcode " << opcode << " operand " << operand << endl;
+                // various checks
+                //  - “ -
+      switch(addressmode)
       {
-        cout << "There was an error in opening input file " << inputFile << ": " << e.what() << endl;
-        return;
+        case 'I':
+          // cout << "DEBUG LOG: case I" << endl;
+          if(instr>9999)
+          {
+            errorString = " Error: Illegal opcode; treated as 9999";
+            operand = 999;
+            opcode = 9;
+          }
+          break;
+        case 'A':
+          // cout << "DEBUG LOG: case B" << endl;
+          if (operand>511)
+          {
+            errorString = " Error: Absolute address exceeds machine size; zero used";
+            operand = 0;
+          }
+          break;
+        case 'E':
+          // cout << "DEBUG LOG: case E" << endl;
+          if (operand>usecount-1)
+          {
+            errorString = " Error: External address exceeds length of uselist; treated as immediate";
+          }
+          else
+          {
+            string usedSym = moduleUseList[operand];
+            for (pair<string, int> p : symbols)
+            {
+              if (p.first  == usedSym)
+              {
+                operand = p.second;
+                break;
+              }
+            }
+          }
+          break;
+        case 'R':
+          // cout << "DEBUG LOG: case R" << endl;
+          if(instr>9999)
+          {
+            errorString = " Error: Illegal opcode; treated as 9999";
+            operand = 999;
+            opcode = 9;
+          }
+          else if(operand>instcount)
+          {
+            errorString = " Error: Relative address exceeds module size; zero used";
+            operand=moduleBase;
+          }
+          else
+          {
+            operand += moduleBase;
+          }
+          break;
+        default:
+          errorString = "Unknown instruction type detected: " + addressmode;
+      }
+      int index = moduleBase+i;
+      // char indexCharArray[7];
+      // snprintf (indexCharArray, 7, "%05d", index);
+      std::stringstream ss;
+      ss << std::setw(3) << std::setfill('0') << index;
+      ss << setfill(' ');
+      std::string indexString = ss.str();
+
+      int tmpInstr = opcode*1000 + operand;
+      string instructionString;
+      if (errorString.empty())
+      {
+        instructionString = indexString + ": " + to_string(tmpInstr);
       }
       else
       {
-        exit(EXIT_FAILURE);
+       instructionString = indexString + ": " + to_string(tmpInstr) + errorString; 
       }
-    } */
+      // string instructionString = string(indexCharArray) + ": " + to_string(tmpInstr) + errorString;
+      // string instructionString = indexString + ": " + to_string(tmpInstr) + errorMessage;
+      instructions.push_back(instructionString);
+    }
+    if (passNum == PASS_ONE)
+    {
+      //check symbol lengths; use instcount
+      //Perform pass1 checks
+    }
+  }
+}
 
-    cout << "LOG: Beginning pass " << passNum << endl;
-    while (fin.peek() != EOF)
+void ParseInput(PASS_TYPE passNum, char* inputFile)
+{
+    // cout << "DEBUG LOG: Parse Input" << endl;
+    // cout << "DEBUG LOG: Beginning pass " << passNum << endl;
+    CreateTokens(passNum, inputFile);
+
+    // Token t1 = GetToken();
+    vector<int>::iterator moduleItr = moduleLengths.begin();
+    vector<pair<string,int>>::iterator symbolsItr = symbols.begin();
+    int moduleBase = 0;
+    vector<string> moduleUseList;
+    while(tokenItr != tokens.end())
     {
       // createModule();
-      cout << "LOG: Reading defintion count";
-      // sleep(10);
+      moduleUseList.clear();
+      vector<pair<string,int>>::iterator localSymbolsItr = symbolsItr;
+      // cout << "DEBUG LOG: Reading defintion count" << endl;
       int defcount = ReadInt();
-      cout << "LOG: Reading definition list for " << defcount << " symbols." << endl;
+      // cout << "DEBUG LOG: Reading definition list for " << defcount << " symbols." << endl;
       for (int i=0;i<defcount;i++)
       {
         // Symbol sym = ReadSymbol();
         string sym = ReadSymbol();
         int val = ReadInt();
-        cout << "LOG: Read symbol " << sym << " and value " << val << endl;
+        // cout << "DEBUG LOG: Read symbol " << sym << " and value " << val << endl;
         // createSymbol(sym,val);
+        symbols.push_back(make_pair(sym, val+moduleBase));
       }
 
       int usecount = ReadInt();
-      cout << "LOG: Reading uselist for " << usecount << " symbols."  << endl;
+      // cout << "DEBUG LOG: Reading uselist for " << usecount << " symbols."  << endl;
       for (int i=0;i<usecount;i++)
       {
         // Symbol sym = ReadSymbol();
         string sym = ReadSymbol();
-        cout << "LOG: Read symbol " << sym << endl;
+        moduleUseList.push_back(sym);
+        // cout << "DEBUG LOG: Read symbol " << sym << endl;
         //we don’t do anything here <- this would change in pass 2 }
       }
 
       int instcount = ReadInt();
-      cout << "LOG: Reading " << instcount << " instructions." << endl;
-      for (int i=0;i<instcount;i++) {
-        char addressmode = ReadIARE();
-        int  operand = ReadInt();
-        cout << "LOG: Instruction addr type " << addressmode << " operand " << operand << endl;
-                  // various checks
-                  //  - “ -
+
+      if (passNum == PASS_ONE)
+      {
+        moduleLengths.push_back(instcount);
       }
+      // cout << "DEBUG LOG: Reading " << instcount << " instructions." << endl;
+      
+      ReadInstructions(passNum, moduleBase, instcount, usecount, moduleUseList);
+      moduleBase += instcount;
     }
-
-
-    // Close input file
-    fin.close();
+    
     if (passNum == PASS_ONE)
     {
-      printf("\n");
+      // To-do: print warnings
+      cout << "Symbol Table" << endl;
+      for(pair<string, int> p : symbols)
+      {
+        cout << p.first << "=" << p.second << endl;
+      }
+      cout << endl;
+    }
+    else
+    {
+      cout << "Memory Map" << endl;
+      for(string instr : instructions)
+      {
+        cout << instr << endl;
+      }
     }
 }
 
 int main (int argc, char** argv)
 {
-    int num = 5;
-    printf("The answer is %05d.\n", num);
+//     int num = 5;
+//     printf("The answer is %05d.\n", num);
 
     // Read input file name from the command line arguments
-    if (argc < 2 || argv[1] == "")
-    {
-      printf("Fail: Provide input file name as program argument.");
-      exit(EXIT_FAILURE);
-    }
+    // if (argc < 2 || argv[1] == "")
+    // {
+    //   cout << "Fail: Provide input file name as program argument." << endl;
+    //   exit(1);
+    // }
 
     // INPUT_FILE = string(argv[1]);
 
     // printf("Input file name: %s\n", INPUT_FILE.c_str());
-    printf("Input file name: %s\n", argv[1]);
+    // cout << "Input file name: " << argv[1] << endl;
 
     // fileArrayPtr = ReadFileToArray();
 
-    fin.open(argv[1]);
     // Parse for Symbol Map i.e. first pass
     ParseInput(PASS_ONE, argv[1]);
 
     // Parse second time to update addresses and resolve external references in Memory map
-    // ParseInput(PASS_TWO, argv[1]);
+    ParseInput(PASS_TWO, argv[1]);
 
 }
