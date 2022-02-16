@@ -4,6 +4,7 @@
 #include <string.h>
 #include <fstream>
 #include <map>
+#include <algorithm>
 #include <vector>
 #include <sstream>
 #include <iomanip>
@@ -64,6 +65,8 @@ vector<Token>::iterator tokenItr;
 vector<pair<string, int>> symbols;
 vector<int> moduleLengths;
 vector<string> instructions;
+vector<string> allUsedSymbols;
+map<string,int> symbolDefinedToModule;
 
 
 // Method to print char array
@@ -308,11 +311,13 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
     vector<int>::iterator moduleItr = moduleLengths.begin();
     vector<pair<string,int>>::iterator symbolsItr = symbols.begin();
     int moduleBase = 0;
+    int moduleCount = 0;
     vector<string> moduleUseList;
     while(tokenItr != tokens.end())
     {
       // createModule();
       moduleUseList.clear();
+      moduleCount++;
       vector<pair<string,int>>::iterator localSymbolsItr = symbolsItr;
       // cout << "DEBUG LOG: Reading defintion count" << endl;
       int defcount = ReadInt();
@@ -324,7 +329,11 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
         int val = ReadInt();
         // cout << "DEBUG LOG: Read symbol " << sym << " and value " << val << endl;
         // createSymbol(sym,val);
-        symbols.push_back(make_pair(sym, val+moduleBase));
+        if (passNum == PASS_ONE)
+        {
+          symbols.push_back(make_pair(sym, val+moduleBase));
+          symbolDefinedToModule[sym] = moduleCount;
+        }
       }
 
       int usecount = ReadInt();
@@ -334,6 +343,7 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
         // Symbol sym = ReadSymbol();
         string sym = ReadSymbol();
         moduleUseList.push_back(sym);
+        allUsedSymbols.push_back(sym);
         // cout << "DEBUG LOG: Read symbol " << sym << endl;
         //we don’t do anything here <- this would change in pass 2 }
       }
@@ -366,6 +376,21 @@ void ParseInput(PASS_TYPE passNum, char* inputFile)
       for(string instr : instructions)
       {
         cout << instr << endl;
+      }
+      // Rule 4 check
+      std::stringstream  errorString4;
+      bool errorFound4;
+      for(pair<string, int> p : symbols)
+      {
+        if (find(allUsedSymbols.begin(), allUsedSymbols.end(), p.first) == allUsedSymbols.end())
+        {
+          errorString4 << "Warning: Module " << symbolDefinedToModule[p.first] << ": " << p.first << " was defined but never used" << "\n";
+          errorFound4 = true;
+        }
+      }
+      if(errorFound4)
+      {
+        cout << "\n" << errorString4.str();
       }
     }
 }
