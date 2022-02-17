@@ -1,0 +1,9 @@
+
+linker.cpp compiles and runs successfully with gcc/g++ version 9.2.0
+
+Please load module gcc-9.2 before comiling and running linker.cpp
+
+Please fire below command to compile and test provided linker.cpp: 
+$ module load gcc-9.2 
+$ make
+
