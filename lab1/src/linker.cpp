@@ -139,17 +139,19 @@ void DetermineOffsets(PASS_TYPE passNum, char* inputFile)
     lineNumber=0;
     lastLineNumber = 0;
     lastOffset = 0;
+    int thisLineNumber = 0;
+    int thisLineOffset = 0;
     while (fin) {
+        lastLineNumber = thisLineNumber;
+        lastOffset = thisLineOffset;
+
         lineNumber++;
         offset = -1;
         // Read a line from input file
         getline(fin, line);
 
-        if (!line.empty())
-        {
-            lastLineNumber = lineNumber;
-            lastOffset = line.length()+1;
-        }
+        thisLineNumber = lineNumber;
+        thisLineOffset = line.length()+1;
 
         char line_cstr[line.length() + 1];
         strcpy(line_cstr, line.c_str());
@@ -168,7 +170,7 @@ void DetermineOffsets(PASS_TYPE passNum, char* inputFile)
             // // cout << "DEBUG LOG: " << t1 << endl;
         }
     }
-    
+
     // Close input file
     fin.close();
     tokenItr = tokens.begin();
