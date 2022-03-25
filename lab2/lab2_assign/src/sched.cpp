@@ -75,14 +75,15 @@ class Scheduler
 };
 
 char DELIMS[3] = {' ', '\t', '\n'};
-const int PROCESS_COUNT = 4;
+// const int PROCESS_COUNT = 4;
 string INPUT_FILE = "";
 string RFILE = "";
 vector<int> randomValues;
 vector<int>::iterator randomValuesIter;
 deque<Event> eventQueue;
 // deque<Process> runQueue;
-Process allProcesses[PROCESS_COUNT];
+// Process allProcesses[PROCESS_COUNT];
+vector<Process> allProcesses;
 int simulationCurrentTime;
 int maxprio;
 int quantum;
@@ -91,10 +92,13 @@ Process* currentRunningProcess;
 
 void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* processPtr)
 {
+    // printf("Event time %d > ", eventTime);
     auto index = find_if(eventQueue.begin(), eventQueue.end(), [eventTime] (auto e)
     {
+        // printf("%d ", e.eventTime);
         return e.eventTime > eventTime;
     });
+    // printf("\n");
 
     eventQueue.insert(index, Event(eventTime, transition, processPtr));
 }
@@ -178,7 +182,7 @@ void ReadProcessInput()
     ifstream fin;
     string line;
     int lineNumber = 0;
-    Process* proc = allProcesses;
+    vector<Process>::iterator proc = allProcesses.begin();
 
     try
     {
@@ -194,12 +198,8 @@ void ReadProcessInput()
     while (fin) {
         // Read a line from input file
         getline(fin, line);
+        if (line.find_first_not_of(" \t") == line.npos) { continue;}
         lineNumber++;
-        if (lineNumber > 4)
-        {
-            printf("Ignoring lines after line Number 4");
-            break;
-        }
         int processDetails [4];
         int detailIndex = 0;
         int r;
@@ -224,12 +224,24 @@ void ReadProcessInput()
         }
 
         auto [at, tc, cb, io] = processDetails;
+        // printf("Read from input: %d - Process(%d, %d, %d, %d) from %s\n", lineNumber, at, tc, cb, io, line.c_str());
         
-        allProcesses[lineNumber] = Process(at, tc, cb, io);
-        // simulationCurrentTime = processDetails[0];
-        AddEventToQueue(at, TRANS_TO_READY, proc);
+        // Process proc = Process(at, tc, cb, io);
+        // Process* procPtr = &proc;
+        // allProcesses.push_back(proc);
+        allProcesses.push_back(Process(at, tc, cb, io));
         proc++;
+        Process* procPtr = &(*proc);
+        // simulationCurrentTime = processDetails[0];
+        AddEventToQueue(at, TRANS_TO_READY, &allProcesses.back());
     }
+
+    // for (Event evt : eventQueue)
+    // {
+    //     Process* tmpProc = evt.processPtr;
+    //     printf("Event at %d: Process(%d, %d, %d, %d) transition %d\n", 
+    //             evt.eventTime, tmpProc->arrivalTime, tmpProc->totalCPU, tmpProc->maxCPUBurst, tmpProc->maxIOBurst, evt.transition);
+    // }
 
     fin.close();
 }
@@ -245,6 +257,9 @@ void Simulation()
         int transition = event.transition;
         bool callScheduler = false;
         eventQueue.pop_front();
+        // printf("%d: Process(%d, %d, %d, %d) transition %d\n", 
+        //         simulationCurrentTime, proc->arrivalTime, proc->totalCPU, proc->maxCPUBurst, proc->maxIOBurst, transition);
+        // continue;
         // int timeInPrevState = simulationCurrentTime - process.stateTimestamp;
 
         switch(transition)
@@ -374,8 +389,8 @@ int main (int argc, char** argv)
     ReadRandomNumbers();
 
     // Read Process Input file
-    // ReadProcessInput();
+    ReadProcessInput();
 
-    // Simulation();
+    Simulation();
 
 }
