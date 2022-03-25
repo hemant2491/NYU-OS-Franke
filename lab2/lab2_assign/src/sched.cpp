@@ -7,6 +7,7 @@
 #include <string.h>
 #include <fstream>
 #include <algorithm>
+#include <queue>
 
 
 using namespace std;
@@ -26,6 +27,7 @@ class Process
         PROCESS_STATE state;
         int nextBurst = 0;
         int totalRunTime = 0;
+        int finishingTime = 0;
 
     Process(int _arrivalTime, int _totalCPU, int _maxCPUBurst, int _maxIOBurst)
     {
@@ -63,16 +65,7 @@ class Event
 
 };
 
-class Scheduler
-{
-    public:
-        virtual void AddProcess(Process* p) = 0;
-        virtual Process* GetNextProcess() = 0;
-        virtual bool TestPreempt(Process* p, int curtime) = 0;
-    
-    public:
-        int quantum = 1000000;
-};
+class Scheduler;
 
 char DELIMS[3] = {' ', '\t', '\n'};
 // const int PROCESS_COUNT = 4;
@@ -89,19 +82,6 @@ int maxprio;
 int quantum;
 Scheduler* scheduler;
 Process* currentRunningProcess;
-
-void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* processPtr)
-{
-    // printf("Event time %d > ", eventTime);
-    auto index = find_if(eventQueue.begin(), eventQueue.end(), [eventTime] (auto e)
-    {
-        // printf("%d ", e.eventTime);
-        return e.eventTime > eventTime;
-    });
-    // printf("\n");
-
-    eventQueue.insert(index, Event(eventTime, transition, processPtr));
-}
 
 void ReadRandomNumbers()
 {
@@ -176,6 +156,56 @@ int GetRandom(int burst)
 
     return (1 + (nextRandom % burst));
 }
+
+class Scheduler
+{
+    public:
+        virtual void AddProcess(Process* p) = 0;
+        virtual Process* GetNextProcess() = 0;
+        virtual bool TestPreempt(Process* p, int curtime) = 0;
+    
+    public:
+        int quantum = 1000000;
+};
+
+class FCFSScheduler : public Scheduler
+{
+    private:
+        queue<Process*> runQueue;
+
+    public:
+        void AddProcess(Process* p)
+        {
+            if (p->state == STATE_READY)
+            {
+                p->nextBurst = GetRandom(p->maxCPUBurst);
+            }
+            runQueue.push(p);
+        }
+        Process* GetNextProcess()
+        {
+            Process* front = runQueue.front();
+            runQueue.pop();
+            return front;
+        }
+        bool TestPreempt(Process* p, int curtime) { return false;}
+    
+};
+
+void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* processPtr)
+{
+    // printf("Event time %d > ", eventTime);
+    auto index = find_if(eventQueue.begin(), eventQueue.end(), [eventTime] (auto e)
+    {
+        // printf("%d ", e.eventTime);
+        return e.eventTime > eventTime;
+    });
+    // printf("\n");
+
+    eventQueue.insert(index, Event(eventTime, transition, processPtr));
+}
+
+
 
 void ReadProcessInput()
 {
@@ -279,20 +309,33 @@ void Simulation()
                 currentRunningProcess = proc;
                 // create Event for either preemption or blocking
                 // if (scheduler->TestPreempt(proc, simulationCurrentTime))
+                proc->state = STATE_RUNNING;
+                int runtime;
+                TRANSITION_TYPE trans;
                 if (proc->nextBurst > scheduler->quantum)
                 {
-                    proc->nextBurst = proc->nextBurst - scheduler->quantum;
-                    AddEventToQueue(simulationCurrentTime + scheduler->quantum, TRANS_TO_PREEMPT, proc);
+                    runtime = scheduler->quantum;
+                    proc->nextBurst -= runtime;
+                    trans = TRANS_TO_PREEMPT;
                 }
                 else
                 {
-                    AddEventToQueue(simulationCurrentTime + proc->nextBurst, TRANS_TO_BLOCK, proc);
+                    runtime = proc->nextBurst;
+                    trans = TRANS_TO_BLOCK;
                 }
+                if (proc->totalRunTime + runtime > proc->totalCPU)
+                {
+                    runtime = proc->totalCPU - proc->totalRunTime;
+                    proc->finishingTime = simulationCurrentTime + runtime;
+                }
+                proc->totalRunTime += runtime;
+                AddEventToQueue(simulationCurrentTime + runtime, trans, proc);
                 break;
             case TRANS_TO_BLOCK:
                 // create Event for when process becomes Ready to run
                 currentRunningProcess = NULL;
                 callScheduler = true;
+                proc->state = STATE_BLOCKED;
                 if (proc->totalRunTime < proc->totalCPU)
                 {
                     int nextBlock = GetRandom(proc->maxIOBurst);
@@ -348,6 +391,7 @@ int main (int argc, char** argv)
             case 's':
                 printf("s value\n");
                 printf("s optarg: %s\n", optarg);
+                scheduler = new FCFSScheduler();
                 // sscanf(optarg, “%d . %d”, &quantum, &maxprio);
                 // printf("quantum %d maxprio %d", quantum, maxprio);
                 break;
