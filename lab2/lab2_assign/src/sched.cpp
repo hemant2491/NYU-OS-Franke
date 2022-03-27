@@ -73,14 +73,14 @@ class Process
         int staticPriority;
         int dynamicPriority;
         PROCESS_STATE lastState, state, nextState;
-        int nextBurst = 0;
+        int activeBurst = 0;
         int totalRunTime = 0;
         int finishingTime = 0;
         int iOTime = 0;
         int cPUWaitingTime = 0;
         int lastStateTransitionTS = 0;
         int lastRunTime = 0;
-        int lastIOBurst = 0;
+        int iOBurst = 0;
 
     Process(int _pid, int _arrivalTime, int _totalCPU, int _maxCPUBurst, int _maxIOBurst) :
     pid(_pid),
@@ -106,23 +106,32 @@ class Process
         lastStateTransitionTS = currentTS;
     }
 
+    void CalculateNextCPUBurst()
+    {
+        if (activeBurst == 0)
+        {
+            activeBurst = GetRandom(maxCPUBurst);
+        }
+    }
+
     tuple<int, TRANSITION_TYPE, PROCESS_STATE> Run(int currentTS)
     {
         // check for either preemption or blocking
         int runtime;
         TRANSITION_TYPE trans;
         PROCESS_STATE next_state;
-        nextBurst = GetRandom(maxCPUBurst);
-        if (nextBurst > scheduler->quantum)
+        
+        if (activeBurst > scheduler->quantum)
         {
             runtime = scheduler->quantum;
-            nextBurst -= runtime;
+            activeBurst -= runtime;
             trans = TRANS_TO_PREEMPT;
             next_state = STATE_PREEMPT;
         }
         else
         {
-            runtime = nextBurst;
+            runtime = activeBurst;
+            activeBurst = 0;
             trans = TRANS_TO_BLOCK;
             next_state = STATE_BLOCKED;
         }
@@ -139,11 +148,18 @@ class Process
         return {runtime, trans, next_state};
     }
 
+    int GetIOBurst()
+    {
+        iOBurst = GetRandom(maxIOBurst);
+        iOTime += iOBurst;
+        return iOBurst;
+    }
+
     int Pause(int currentTS)
     {
         int nextBlock = GetRandom(maxIOBurst);
         iOTime += nextBlock;
-        lastIOBurst = nextBlock;
+        iOBurst = nextBlock;
         return nextBlock;
     }
 
@@ -173,26 +189,26 @@ class Event
         switch (transition)
         {
             case TRANS_TO_READY:
-                printf("%d %d %d: %s -> %s\n", eventTime, proc->pid, proc->lastState == STATE_RUNNING ? proc->lastRunTime : proc->lastIOBurst, 
+                printf("%d %d %d: %s -> %s\n", eventTime, proc->pid, proc->lastState == STATE_RUNNING ? proc->lastRunTime : proc->iOBurst, 
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str());
                 break;
             case TRANS_TO_RUN:
                 printf("%d %d 0: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, 
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
-                            proc->nextBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
+                            proc->activeBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
                 break;
             case TRANS_TO_BLOCK:
                 printf("%d %d %d: %s -> %s ib=%d rem=%d\n", eventTime, proc->pid, proc->lastState == STATE_RUNNING ? proc->lastRunTime : 0, 
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
-                            proc->lastIOBurst, proc->totalCPU - proc->totalRunTime);
+                            proc->iOBurst, proc->totalCPU - proc->totalRunTime);
                 break;
             case TRANS_TO_PREEMPT:
                 printf("%d %d 0: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, 
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
-                            proc->nextBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
+                            proc->activeBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
                 break;
             case TRANS_TO_DONE:
-                printf("%d %d %d: %s\n", eventTime, proc->pid, proc->lastRunTime, ProcessStateStrings[proc->state].c_str());
+                printf("%d %d %d: %s\n", eventTime, proc->pid, proc->lastRunTime, ProcessStateStrings[proc->nextState].c_str());
                 break;
         }
     }
@@ -547,19 +563,32 @@ void ReadProcessInput()
 //     cPUUtilizationWindowBegin = 0;
 // }
 
-void UpdateIOUtilization(int start, int stop)
+void UpdateIOUtilization(int start, int end)
 {
+    // printf("%s: total io %d current io window start %d end %d new io start %d end %d\n",
+    //             __func__, simulationIOUtilization, 
+    //             iOUtilizationWindowBegin, iOUtilizationWindowEnd,
+    //             start, end);
     if (iOUtilizationWindowEnd < start)
     {
         simulationIOUtilization += (iOUtilizationWindowEnd - iOUtilizationWindowBegin);
         iOUtilizationWindowBegin = start;
-        iOUtilizationWindowEnd = stop;
+        iOUtilizationWindowEnd = end;
     }
-    else if (iOUtilizationWindowEnd < stop)
+    else if (iOUtilizationWindowEnd < end)
     {
-        iOUtilizationWindowEnd = stop;
+        iOUtilizationWindowEnd = end;
     }
 }
+
+void UpdateRemainingIO()
+{
+    if (iOUtilizationWindowBegin < iOUtilizationWindowEnd)
+    {
+        simulationIOUtilization += (iOUtilizationWindowEnd - iOUtilizationWindowBegin);
+    }
+}
+
 
 void Simulation()
 {
@@ -574,10 +603,7 @@ void Simulation()
         bool callScheduler = false;
         int eventBurst = 0;
         eventQueue.pop_front();
-        if(printVerbose)
-        {
-            event.Print();
-        }
+        // if(printVerbose) { event.Print();}
         // printf(">>>>>>>>    Processing ");
         // event.Print();
         // PrintEventQueue();
@@ -588,6 +614,7 @@ void Simulation()
             case TRANS_TO_READY:
             {    
                 // Add to RunQueue
+                if(printVerbose) { event.Print();}
                 scheduler->AddProcess(&(*proc));
                 proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
                 callScheduler = true;
@@ -596,6 +623,8 @@ void Simulation()
             case TRANS_TO_RUN:
             {
                 proc->cPUWaitingTime += (simulationCurrentTime - proc->lastStateTransitionTS);
+                proc->CalculateNextCPUBurst();
+                if(printVerbose) { event.Print();}
                 auto [runtime, trans, next_state] = proc->Run(simulationCurrentTime);
                 currentRunningProcess = proc;
                 simulationCPUUtilization += runtime;
@@ -606,16 +635,18 @@ void Simulation()
             case TRANS_TO_BLOCK:
             {   
                 // create Event for when process becomes Ready to run
-                int nextBlock = proc->Pause(simulationCurrentTime);
+                int nextBlock = proc->GetIOBurst();
+                if(printVerbose) { event.Print();}
                 currentRunningProcess = NULL;
                 UpdateIOUtilization(simulationCurrentTime, simulationCurrentTime + nextBlock);
                 AddEventToQueue(simulationCurrentTime + nextBlock, TRANS_TO_READY, &(*proc));
-                proc->UpdateNextState(simulationCurrentTime, STATE_BLOCKED);
+                proc->UpdateNextState(simulationCurrentTime, STATE_READY);
                 callScheduler = true;
                 break;
             }
             case TRANS_TO_PREEMPT:
             { 
+                if(printVerbose) { event.Print();}
                 scheduler->AddProcess(&(*proc));
                 currentRunningProcess = NULL;
                 proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
@@ -624,6 +655,7 @@ void Simulation()
             }
             case TRANS_TO_DONE:
             {
+                if(printVerbose) { event.Print();}
                 // proc->UpdateNextState(simulationCurrentTime, STATE_DONE);
                 currentRunningProcess = NULL;
                 // printf("%d Process completed\n",proc->pid);
@@ -645,6 +677,7 @@ void Simulation()
         // printf("Event Queue after processing this event.\n");
         // PrintEventQueue();
     }
+    UpdateRemainingIO();
 }
 
 void PrintSummary()
@@ -664,13 +697,13 @@ void PrintSummary()
         proc.pid, proc.arrivalTime, proc.totalCPU, proc.maxCPUBurst, proc.maxIOBurst, proc.staticPriority,
         proc.finishingTime, turnAroundTime, proc.iOTime, proc.cPUWaitingTime);
     }
-    printf("\
-    Process Counter %d\n\
-    simulation total CPU utilization %d\n\
-    simulation total IO utilization %d\n\
-    total turn around time %d\n\
-    total cpu waiting time %d\n",
-            processCounter, simulationCPUUtilization, simulationIOUtilization, totalTurnAroundTime, totalCPUWaitingTime);
+    // printf("\
+    // Process Counter %d\n\
+    // simulation total CPU utilization %d\n\
+    // simulation total IO utilization %d\n\
+    // total turn around time %d\n\
+    // total cpu waiting time %d\n",
+    //         processCounter, simulationCPUUtilization, simulationIOUtilization, totalTurnAroundTime, totalCPUWaitingTime);
 
     double percCPUUtilization = ((double) simulationCPUUtilization / simulationCurrentTime) * 100.00;
     double percIOUtilization = ((double) simulationIOUtilization / simulationCurrentTime) * 100.00;
