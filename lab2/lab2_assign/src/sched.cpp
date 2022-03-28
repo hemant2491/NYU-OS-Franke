@@ -220,7 +220,7 @@ class Event
                             proc->iOBurst, proc->remainingCPUTime);
                 break;
             case TRANS_TO_PREEMPT:
-                printf("%d %d %d: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, proc->lastRunTime,
+                printf("%d %d %d: %s -> %s  cb=%d rem=%d prio=%d\n", eventTime, proc->pid, proc->lastRunTime,
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
                             proc->activeBurst, proc->remainingCPUTime, proc->dynamicPriority);
                 break;
@@ -383,6 +383,7 @@ class PrioScheduler : public Scheduler
             if (p->dynamicPriority == -1)
             {
                 // cout << "AAAAA process " << p->pid << " expiredQueue " << endl;
+                p->dynamicPriority = p->staticPriority - 1;
                 AddToQ(p, expiredQueue);
             }
             else
@@ -404,7 +405,6 @@ class PrioScheduler : public Scheduler
             if(runQueue->empty()) { return NULL;}
             // cout << "FFFFF  " << endl;
             Process* front = runQueue->front();
-            front->dynamicPriority -= 1;
             runQueue->pop_front();
             // cout << "GGGGGG  process " << front->pid << endl;
             return front;
@@ -636,6 +636,11 @@ void UpdateIOUtilization(int start, int end)
     }
 }
 
+void UpdateDynamicPrio(Process* proc)
+{
+    
+}
+
 void UpdateRemainingIO()
 {
     if (iOUtilizationWindowBegin < iOUtilizationWindowEnd)
@@ -671,9 +676,9 @@ void Simulation()
                 // Add to RunQueue
                 // cout << "trans to ready" << endl;
                 if(printVerbose) { event.PrintVerbose();}
-                scheduler->AddProcess(&(*proc));
                 proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
                 proc->readytime = simulationCurrentTime;
+                scheduler->AddProcess(&(*proc));
                 callScheduler = true;
                 break;
             }
@@ -686,8 +691,8 @@ void Simulation()
                 auto [runtime, trans, next_state] = proc->Run(simulationCurrentTime);
                 currentRunningProcess = proc;
                 simulationCPUUtilization += runtime;
-                AddEventToQueue(simulationCurrentTime + runtime, trans, &(*proc));
                 proc->UpdateNextState(simulationCurrentTime, next_state);
+                AddEventToQueue(simulationCurrentTime + runtime, trans, &(*proc));
                 break;
             }
             case TRANS_TO_BLOCK:
@@ -698,8 +703,9 @@ void Simulation()
                 if(printVerbose) { event.PrintVerbose();}
                 currentRunningProcess = NULL;
                 UpdateIOUtilization(simulationCurrentTime, simulationCurrentTime + nextBlock);
-                AddEventToQueue(simulationCurrentTime + nextBlock, TRANS_TO_READY, &(*proc));
                 proc->UpdateNextState(simulationCurrentTime, STATE_READY);
+                AddEventToQueue(simulationCurrentTime + nextBlock, TRANS_TO_READY, &(*proc));
+                proc->dynamicPriority = proc->staticPriority - 1;
                 callScheduler = true;
                 break;
             }
@@ -708,9 +714,13 @@ void Simulation()
                 // cout << "trans to preempt proc " << proc->pid << " dp " << proc->dynamicPriority << endl;
                 if(printVerbose) { event.PrintVerbose();}
                 // cout << "LLLLL " << endl;
-                scheduler->AddProcess(&(*proc));
+                if (schedulerType == PRIO || schedulerType == PREPRIO)
+                {
+                    proc->dynamicPriority -= 1;
+                }
                 currentRunningProcess = NULL;
-                proc->UpdateNextState(simulationCurrentTime, STATE_READY);
+                proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
+                scheduler->AddProcess(&(*proc));
                 callScheduler = true;
                 break;
             }
