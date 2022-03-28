@@ -324,33 +324,34 @@ class SRTFScheduler : public Scheduler
     
 };
 
-// class RRScheduler : public Scheduler
-// {
-//     private:
-//         queue<Process*> runQueue;
+class RRScheduler : public Scheduler
+{
+    private:
+        deque<Process*> runQueue;
 
-//     public:
-//         const char* GetSchedulerInfo()
-//         { 
-//             stringstream ss;
-//             ss << "RR " << quantum;
-//             // string tmpStr = "RR" + " " + quantum;
-//             return ss.str().c_str();
-//         }
-//         void AddProcess(Process* p)
-//         {
-//             //Todo
-//         }
-//         Process* GetNextProcess()
-//         {
-//             Process* front = runQueue.front();
-//             runQueue.pop();
-//             return front;
-//         }
-//         bool TestPreempt(Process* p, int curtime) { return true;}
-//         void SetQuantum(int q) { quantum = q;}
+    public:
+        const char* GetSchedulerInfo()
+        { 
+            stringstream ss;
+            ss << "RR " << quantum;
+            // string tmpStr = "RR" + " " + quantum;
+            return ss.str().c_str();
+        }
+        void AddProcess(Process* p)
+        {
+            runQueue.push_back(p);
+        }
+        Process* GetNextProcess()
+        {
+            if(runQueue.empty()) { return NULL;}
+            Process* front = runQueue.front();
+            runQueue.pop_front();
+            return front;
+        }
+        bool TestPreempt(Process* p, int curtime) { return false;}
+        void SetQuantum(int q) { quantum = q;}
     
-// };
+};
 
 // class PrioScheduler : public Scheduler
 // {
@@ -800,7 +801,7 @@ int main (int argc, char** argv)
                         scheduler = new SRTFScheduler();
                         break;
                     case 'R':
-                        // scheduler = new RRScheduler();
+                        scheduler = new RRScheduler();
                         scheduler->quantum = quantum;
                         scheduler->maxprio = maxprio;
                         break;
