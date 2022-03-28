@@ -132,7 +132,7 @@ class Process
             runtime = scheduler->quantum;
             activeBurst -= runtime;
             trans = TRANS_TO_PREEMPT;
-            next_state = STATE_PREEMPT;
+            next_state = STATE_READY;
         }
         else
         {
@@ -194,7 +194,7 @@ class Event
 
     void Print()
     {
-        printf("%d:%d:%d", eventTime, proc->pid, proc->nextState);
+        printf("%d:%d:%s", eventTime, proc->pid, ProcessStateStrings[proc->nextState].c_str());
     }
 
     void PrintVerbose()
@@ -220,7 +220,7 @@ class Event
                             proc->iOBurst, proc->remainingCPUTime);
                 break;
             case TRANS_TO_PREEMPT:
-                printf("%d %d d: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, proc->lastRunTime,
+                printf("%d %d %d: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, proc->lastRunTime,
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
                             proc->activeBurst, proc->remainingCPUTime, proc->dynamicPriority);
                 break;
@@ -250,7 +250,7 @@ class FCFSScheduler : public Scheduler
             if(runQueue.size()==0){
                 return NULL;
             }
-            if(traceRunQ)
+            if(printVerbose && traceRunQ)
             {
                 PrintRunQueue(runQueue);
             }
@@ -330,13 +330,8 @@ class RRScheduler : public Scheduler
         deque<Process*> runQueue;
 
     public:
-        const char* GetSchedulerInfo()
-        { 
-            stringstream ss;
-            ss << "RR " << quantum;
-            // string tmpStr = "RR" + " " + quantum;
-            return ss.str().c_str();
-        }
+        const char* GetSchedulerInfo() { return "RR";}
+
         void AddProcess(Process* p)
         {
             runQueue.push_back(p);
@@ -353,57 +348,78 @@ class RRScheduler : public Scheduler
     
 };
 
-// class PrioScheduler : public Scheduler
-// {
-//     private:
-//         queue<Process*> runQueue;
+class PrioScheduler : public Scheduler
+{
+    private:
+        deque<Process*>* runQueue = new deque<Process*>();
+        deque<Process*>* expiredQueue = new deque<Process*>();
 
-//     public:
-//         const char* GetSchedulerInfo()
-//         { 
-//             stringstream ss;
-//             ss << "PRIO " << quantum;
-//             return ss.str().c_str();
-//         }
-//         void AddProcess(Process* p)
-//         {
-//             //Todo
-//         }
-//         Process* GetNextProcess()
-//         {
-//             Process* front = runQueue.front();
-//             runQueue.pop();
-//             return front;
-//         }
-//         bool TestPreempt(Process* p, int curtime) { return true;}
-//         void SetQuantum(int q) { quantum = q;}
-// };
+    public:
+        const char* GetSchedulerInfo() { return "PRIO";}
 
-// class PrePrioScheduler : public Scheduler
-// {
-//     private:
-//         queue<Process*> runQueue;
+        void SwapRunWithExpired()
+        {
+            deque<Process*>* tmpQ = runQueue;
+            runQueue = expiredQueue;
+            expiredQueue = tmpQ;
+        }
 
-//     public:
-//         const char* GetSchedulerInfo()
-//         { 
-//             stringstream ss;
-//             ss << "PREPRIO " << quantum;
-//             return ss.str().c_str();
-//         }
-//         void AddProcess(Process* p)
-//         {
-//             //Todo
-//         }
-//         Process* GetNextProcess()
-//         {
-//             Process* front = runQueue.front();
-//             runQueue.pop();
-//             return front;
-//         }
-//         bool TestPreempt(Process* p, int curtime) { return true;}
-//         void SetQuantum(int q) { quantum = q;}
-// };
+        void AddToQ(Process* p, deque<Process*>* q)
+        {
+            // cout << "CCCCC process " << p->pid << " dp " << p->dynamicPriority << endl;
+            int dp = p->dynamicPriority;
+            auto index = find_if(q->begin(), q->end(), [dp] (auto proc)
+            {
+                // cout << "Inside pred " << endl;
+                return proc->dynamicPriority < dp;
+            });
+
+            q->insert(index, p);
+        }
+
+        void AddProcess(Process* p)
+        {
+            // cout << "MMMMM" << endl;
+            if (p->dynamicPriority == -1)
+            {
+                // cout << "AAAAA process " << p->pid << " expiredQueue " << endl;
+                AddToQ(p, expiredQueue);
+            }
+            else
+            {
+                // cout << "BBBBB process " << p->pid << " runQueue " << endl;
+                AddToQ(p, runQueue);
+            }
+            // cout << "Added" << endl;
+        }
+
+        Process* GetNextProcess()
+        {
+            if (runQueue->empty())
+            {
+                // cout << "DDDDD " << endl;
+                SwapRunWithExpired();
+            }
+            // cout << "EEEEE  " << endl;
+            if(runQueue->empty()) { return NULL;}
+            // cout << "FFFFF  " << endl;
+            Process* front = runQueue->front();
+            front->dynamicPriority -= 1;
+            runQueue->pop_front();
+            // cout << "GGGGGG  process " << front->pid << endl;
+            return front;
+        }
+        bool TestPreempt(Process* p, int curtime) { return false;}
+        void SetQuantum(int q) { quantum = q;}
+};
+
+class PrePrioScheduler : public PrioScheduler
+{
+    public:
+        const char* GetSchedulerInfo() { return "PREPRIO";}
+
+        bool TestPreempt(Process* p, int curtime) { return true;}
+};
 
 void ReadRandomNumbers()
 {
@@ -489,7 +505,9 @@ void PrintEventQueue()
         // Process* tmpProc = evtIter->processPtr;
         // printf("Event at %04d: Process(%04d, %d, %d, %d) transition %d\n", 
                 // evt.eventTime, tmpProc->arrivalTime, tmpProc->totalCPU, tmpProc->maxCPUBurst, tmpProc->maxIOBurst, evt.transition);
-                // evtIter->eventTime, evtIter->processPtr->arrivalTime, evtIter->processPtr->totalCPU, evtIter->processPtr->maxCPUBurst, evtIter->processPtr->maxIOBurst, evtIter->transition);
+                // evtIter->eventTime, 
+                // evtIter->processPtr->arrivalTime, evtIter->processPtr->totalCPU, evtIter->processPtr->maxCPUBurst, evtIter->processPtr->maxIOBurst,
+                // evtIter->transition);
     }
     printf("======================================================\n\n");
     */
@@ -510,9 +528,10 @@ void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* proc)
     });
 
     Event evt(eventTime, transition, proc);
+    // cout << "IIIIII" << endl;
     // printf("Adding event to queue - ");
     // evt.PrintVerbose();
-    if (showEventQ)
+    if (printVerbose && showEventQ)
     {
         printf("AddEvent(");
         evt.Print();
@@ -521,10 +540,11 @@ void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* proc)
     }
     eventQueue.insert(index, evt);
 
-    if (showEventQ)
+    if (printVerbose && showEventQ)
     {
         printf(" ==> ");
         PrintEventQueue();
+        printf("\n");
     }
     // PrintEventQueue();
 }
@@ -649,6 +669,7 @@ void Simulation()
             case TRANS_TO_READY:
             {    
                 // Add to RunQueue
+                // cout << "trans to ready" << endl;
                 if(printVerbose) { event.PrintVerbose();}
                 scheduler->AddProcess(&(*proc));
                 proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
@@ -658,6 +679,7 @@ void Simulation()
             }
             case TRANS_TO_RUN:
             {
+                // cout << "trans to run" << endl;
                 proc->cPUWaitingTime += (simulationCurrentTime - proc->lastStateTransitionTS);
                 proc->CalculateNextCPUBurst();
                 if(printVerbose) { event.PrintVerbose();}
@@ -671,6 +693,7 @@ void Simulation()
             case TRANS_TO_BLOCK:
             {   
                 // create Event for when process becomes Ready to run
+                // cout << "trans to block" << endl;
                 int nextBlock = proc->GetIOBurst();
                 if(printVerbose) { event.PrintVerbose();}
                 currentRunningProcess = NULL;
@@ -682,7 +705,9 @@ void Simulation()
             }
             case TRANS_TO_PREEMPT:
             { 
+                // cout << "trans to preempt proc " << proc->pid << " dp " << proc->dynamicPriority << endl;
                 if(printVerbose) { event.PrintVerbose();}
+                // cout << "LLLLL " << endl;
                 scheduler->AddProcess(&(*proc));
                 currentRunningProcess = NULL;
                 proc->UpdateNextState(simulationCurrentTime, STATE_READY);
@@ -691,6 +716,7 @@ void Simulation()
             }
             case TRANS_TO_DONE:
             {
+                // cout << "trans to done" << endl;
                 if(printVerbose) { event.PrintVerbose();}
                 // proc->UpdateNextState(simulationCurrentTime, STATE_DONE);
                 currentRunningProcess = NULL;
@@ -702,12 +728,15 @@ void Simulation()
 
         if (callScheduler)
         {
+            // cout << "JJJJJ " << endl;
             if (eventQueue.front().eventTime == simulationCurrentTime) { continue;}
+            // cout << "KKKKK " << endl;
             callScheduler = false;
             if (currentRunningProcess == NULL)
             {
                 Process* p = scheduler->GetNextProcess();
                 if (p == NULL) { continue;}
+                // cout << "HHHHH " << endl;
                 AddEventToQueue(simulationCurrentTime, TRANS_TO_RUN, p);
             }
         }
@@ -719,7 +748,12 @@ void Simulation()
 
 void PrintSummary()
 {
-    printf("%s\n",scheduler->GetSchedulerInfo());
+    printf("%s",scheduler->GetSchedulerInfo());
+    if (schedulerType == RR || schedulerType == PRIO || schedulerType == PREPRIO)
+    {
+        printf(" %d", scheduler->quantum);
+    }
+    printf("\n");
     int processCounter = 0;
     int totalTurnAroundTime = 0;
     int totalCPUWaitingTime = 0;
@@ -793,27 +827,32 @@ int main (int argc, char** argv)
                 {
                     case 'F':
                         scheduler = new FCFSScheduler();
+                        schedulerType = FCFS;
                         break;
                     case 'L':
                         scheduler = new LCFSScheduler();
+                        schedulerType = LCFS;
                         break;
                     case 'S':
                         scheduler = new SRTFScheduler();
+                        schedulerType = SRTF;
                         break;
                     case 'R':
                         scheduler = new RRScheduler();
                         scheduler->quantum = quantum;
-                        scheduler->maxprio = maxprio;
+                        schedulerType = RR;
                         break;
                     case 'P':
-                        // scheduler = new PrioScheduler();
+                        scheduler = new PrioScheduler();
                         scheduler->quantum = quantum;
                         scheduler->maxprio = maxprio;
+                        schedulerType = PRIO;
                         break;
                     case 'E':
-                        // scheduler = new PrePrioScheduler();
+                        scheduler = new PrePrioScheduler();
                         scheduler->quantum = quantum;
                         scheduler->maxprio = maxprio;
+                        schedulerType = PREPRIO;
                         break;
                 }
                 // printf("sched %c quantum %d maxprio %d\n", sched, quantum, maxprio);
