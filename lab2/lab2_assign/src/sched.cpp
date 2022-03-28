@@ -61,6 +61,9 @@ Scheduler* scheduler;
 Process* currentRunningProcess;
 SCHEDULER_TYPE schedulerType;
 bool printVerbose = false;
+bool traceEvents = false;
+bool displayEventQ = false;
+bool showPreemptDecision = false;
 
 class Process
 {
@@ -81,6 +84,7 @@ class Process
         int lastStateTransitionTS = 0;
         int lastRunTime = 0;
         int iOBurst = 0;
+        int readytime = 0;
 
     Process(int _pid, int _arrivalTime, int _totalCPU, int _maxCPUBurst, int _maxIOBurst) :
     pid(_pid),
@@ -186,24 +190,33 @@ class Event
 
     void Print()
     {
+        printf("%d:%d:%d", eventTime, proc->pid, proc->nextState);
+    }
+
+    void PrintVerbose()
+    {
         switch (transition)
         {
             case TRANS_TO_READY:
-                printf("%d %d %d: %s -> %s\n", eventTime, proc->pid, proc->lastState == STATE_RUNNING ? proc->lastRunTime : proc->iOBurst, 
+                printf("%d %d %d: %s -> %s\n", eventTime, proc->pid, proc->iOBurst, 
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str());
                 break;
             case TRANS_TO_RUN:
-                printf("%d %d 0: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, 
+                {
+                    auto effectiveBurst = (proc->totalCPU - proc->totalRunTime) > proc->activeBurst ? proc->activeBurst : (proc->totalCPU - proc->totalRunTime);
+                    printf("%d %d %d: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, eventTime - proc->lastStateTransitionTS,
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
-                            proc->activeBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
+                            effectiveBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
+                
                 break;
+                }
             case TRANS_TO_BLOCK:
-                printf("%d %d %d: %s -> %s ib=%d rem=%d\n", eventTime, proc->pid, proc->lastState == STATE_RUNNING ? proc->lastRunTime : 0, 
+                printf("%d %d %d: %s -> %s  ib=%d rem=%d\n", eventTime, proc->pid, proc->lastRunTime, 
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
                             proc->iOBurst, proc->totalCPU - proc->totalRunTime);
                 break;
             case TRANS_TO_PREEMPT:
-                printf("%d %d 0: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, 
+                printf("%d %d d: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, proc->lastRunTime,
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
                             proc->activeBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
                 break;
@@ -225,77 +238,80 @@ class FCFSScheduler : public Scheduler
         const char* GetSchedulerInfo() { return "FCFS";}
         void AddProcess(Process* p)
         {
-            
-            // printf("Adding process to run queue ");
-            // p->Print();
-            // printf("\n");
+            // printf("Runque in : %d\n", p->pid);
             runQueue.push(p);
-            // printf("Run queue size %d\n", runQueue.size());
-            // PrintRunQueue(runQueue);
         }
         Process* GetNextProcess()
         {
             if(runQueue.size()==0){
                 return NULL;
             }
+            if(traceEvents)
+            {
+                PrintRunQueue(runQueue);
+            }
             Process* front = runQueue.front();
+            // printf("Runque out : %d\n", front->pid);
             runQueue.pop();
             return front;
         }
         bool TestPreempt(Process* p, int curtime) { return false;}
         void PrintRunQueue(queue<Process*> q)
         {
-            printf("Run Queue(%d):\n", q.size());
+            //Example: SCHED (9):  6:1292 2:1300 7:1315 9:1316 5:1335 3:1343 8:1347 1:1360 4:1360
+            printf("SCHED (%d): ", q.size());
             while (!q.empty())
             {
-                q.front()->Print();
-                printf("\n");
+                printf(" %d:%d", q.front()->pid, q.front()->readytime);
                 q.pop();
             }
+            printf("\n");
         }
     
 };
-// class LCFSScheduler : public Scheduler
-// {
-//     private:
-//         stack<Process*> runQueue;
 
-//     public:
-//         char* GetSchedulerInfo() { return "LCFS";}
-//         void AddProcess(Process* p)
-//         {
-//             //Todo
-//         }
-//         Process* GetNextProcess()
-//         {
-//             Process* front = runQueue.front();
-//             runQueue.pop();
-//             return front;
-//         }
-//         bool TestPreempt(Process* p, int curtime) { return false;}
+class LCFSScheduler : public Scheduler
+{
+    private:
+        stack<Process*> runQueue;
+
+    public:
+        const char* GetSchedulerInfo() { return "LCFS";}
+        void AddProcess(Process* p)
+        {
+            runQueue.push(p);
+        }
+        Process* GetNextProcess()
+        {
+            if (runQueue.empty()) { return NULL;}
+            Process* top = runQueue.top();
+            runQueue.pop();
+            return top;
+        }
+        bool TestPreempt(Process* p, int curtime) { return false;}
     
-// };
+};
 
-// class SRTFScheduler : public Scheduler
-// {
-//     private:
-//         queue<Process*> runQueue;
+class SRTFScheduler : public Scheduler
+{
+    private:
+        queue<Process*> runQueue;
 
-//     public:
-//         char* GetSchedulerInfo() { return "SRTF";}
-//         void AddProcess(Process* p)
-//         {
-//             //Todo
-//         }
-//         Process* GetNextProcess()
-//         {
-//             Process* front = runQueue.front();
-//             runQueue.pop();
-//             return front;
-//         }
-//         bool TestPreempt(Process* p, int curtime) { return false;}
+    public:
+        const char* GetSchedulerInfo() { return "SRTF";}
+        void AddProcess(Process* p)
+        {
+            
+        }
+        Process* GetNextProcess()
+        {
+            Process* front = runQueue.front();
+            runQueue.pop();
+            return front;
+        }
+        bool TestPreempt(Process* p, int curtime) { return false;}
     
-// };
+};
 
 // class RRScheduler : public Scheduler
 // {
@@ -303,7 +319,7 @@ class FCFSScheduler : public Scheduler
 //         queue<Process*> runQueue;
 
 //     public:
-//         char* GetSchedulerInfo()
+//         const char* GetSchedulerInfo()
 //         { 
 //             stringstream ss;
 //             ss << "RR " << quantum;
@@ -331,7 +347,7 @@ class FCFSScheduler : public Scheduler
 //         queue<Process*> runQueue;
 
 //     public:
-//         char* GetSchedulerInfo()
+//         const char* GetSchedulerInfo()
 //         { 
 //             stringstream ss;
 //             ss << "PRIO " << quantum;
@@ -357,7 +373,7 @@ class FCFSScheduler : public Scheduler
 //         queue<Process*> runQueue;
 
 //     public:
-//         char* GetSchedulerInfo()
+//         const char* GetSchedulerInfo()
 //         { 
 //             stringstream ss;
 //             ss << "PREPRIO " << quantum;
@@ -453,10 +469,10 @@ int GetRandom(int burst)
 
 void PrintEventQueue()
 {
-    printf("\n===================  Event queue  ====================\n");
+    /** printf("\n===================  Event queue  ====================\n");
     for (auto evtIter = eventQueue.begin(); evtIter != eventQueue.end(); evtIter++)
     {
-        evtIter->Print();
+        evtIter->PrintVerbose();
         // Process* tmpProc = evt.processPtr;
         // Process* tmpProc = evtIter->processPtr;
         // printf("Event at %04d: Process(%04d, %d, %d, %d) transition %d\n", 
@@ -464,6 +480,13 @@ void PrintEventQueue()
                 // evtIter->eventTime, evtIter->processPtr->arrivalTime, evtIter->processPtr->totalCPU, evtIter->processPtr->maxCPUBurst, evtIter->processPtr->maxIOBurst, evtIter->transition);
     }
     printf("======================================================\n\n");
+    */
+
+    for (auto evtIter = eventQueue.begin(); evtIter != eventQueue.end(); evtIter++)
+    {
+        printf("  ");
+        evtIter->Print();
+    }
 }
 
 
@@ -476,8 +499,21 @@ void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* proc)
 
     Event evt(eventTime, transition, proc);
     // printf("Adding event to queue - ");
-    // evt.Print();
+    // evt.PrintVerbose();
+    if (displayEventQ)
+    {
+        printf("AddEvent(");
+        evt.Print();
+        printf("):");
+        PrintEventQueue();
+    }
     eventQueue.insert(index, evt);
+
+    if (displayEventQ)
+    {
+        printf(" ==> ");
+        PrintEventQueue();
+    }
     // PrintEventQueue();
 }
 
@@ -487,7 +523,7 @@ void ReadProcessInput()
     string line;
     int lineNumber = 0;
     vector<Process>::iterator proc = allProcesses.begin();
-    printf("Reading process details from %s\n", INPUT_FILE.c_str());
+    // printf("Reading process details from %s\n", INPUT_FILE.c_str());
 
     try
     {
@@ -550,19 +586,6 @@ void ReadProcessInput()
     fin.close();
 }
 
-// void StartCPUUtilization(int currentTS, Process* proc)
-// {
-    
-//     cPUUtilizationWindowBegin = currentTS;
-// }
-
-// void StopCPUUtilization(int currentTS)
-// {
-//     currentRunningProcess = NULL;
-//     simulationCPUUtilization += (currentTS - cPUUtilizationWindowBegin);
-//     cPUUtilizationWindowBegin = 0;
-// }
-
 void UpdateIOUtilization(int start, int end)
 {
     // printf("%s: total io %d current io window start %d end %d new io start %d end %d\n",
@@ -603,9 +626,9 @@ void Simulation()
         bool callScheduler = false;
         int eventBurst = 0;
         eventQueue.pop_front();
-        // if(printVerbose) { event.Print();}
+        // if(printVerbose) { event.PrintVerbose();}
         // printf(">>>>>>>>    Processing ");
-        // event.Print();
+        // event.PrintVerbose();
         // PrintEventQueue();
         // int timeInPrevState = simulationCurrentTime - process.stateTimestamp;
 
@@ -614,9 +637,10 @@ void Simulation()
             case TRANS_TO_READY:
             {    
                 // Add to RunQueue
-                if(printVerbose) { event.Print();}
+                if(printVerbose) { event.PrintVerbose();}
                 scheduler->AddProcess(&(*proc));
                 proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
+                proc->readytime = simulationCurrentTime;
                 callScheduler = true;
                 break;
             }
@@ -624,7 +648,7 @@ void Simulation()
             {
                 proc->cPUWaitingTime += (simulationCurrentTime - proc->lastStateTransitionTS);
                 proc->CalculateNextCPUBurst();
-                if(printVerbose) { event.Print();}
+                if(printVerbose) { event.PrintVerbose();}
                 auto [runtime, trans, next_state] = proc->Run(simulationCurrentTime);
                 currentRunningProcess = proc;
                 simulationCPUUtilization += runtime;
@@ -636,7 +660,7 @@ void Simulation()
             {   
                 // create Event for when process becomes Ready to run
                 int nextBlock = proc->GetIOBurst();
-                if(printVerbose) { event.Print();}
+                if(printVerbose) { event.PrintVerbose();}
                 currentRunningProcess = NULL;
                 UpdateIOUtilization(simulationCurrentTime, simulationCurrentTime + nextBlock);
                 AddEventToQueue(simulationCurrentTime + nextBlock, TRANS_TO_READY, &(*proc));
@@ -646,18 +670,19 @@ void Simulation()
             }
             case TRANS_TO_PREEMPT:
             { 
-                if(printVerbose) { event.Print();}
+                if(printVerbose) { event.PrintVerbose();}
                 scheduler->AddProcess(&(*proc));
                 currentRunningProcess = NULL;
-                proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
+                proc->UpdateNextState(simulationCurrentTime, STATE_READY);
                 callScheduler = true;
                 break;
             }
             case TRANS_TO_DONE:
             {
-                if(printVerbose) { event.Print();}
+                if(printVerbose) { event.PrintVerbose();}
                 // proc->UpdateNextState(simulationCurrentTime, STATE_DONE);
                 currentRunningProcess = NULL;
+                callScheduler = true;
                 // printf("%d Process completed\n",proc->pid);
                 break;
             }
@@ -720,26 +745,29 @@ int main (int argc, char** argv)
     opterr = 0;
     int cmdopt;
 
-    printf("Number of arguments = %d\n", argc);
-    printf("optind: %d : %s\n", optind, argv[optind-1]);
+    // printf("Number of arguments = %d\n", argc);
+    // printf("optind: %d : %s\n", optind, argv[optind-1]);
 
     while ((cmdopt = getopt(argc, argv, "vteps:")) != -1)
     {
-        printf("optind: %d : ", optind);
+        // printf("optind: %d : ", optind);
         switch (cmdopt)
         {
             case 'v':
                 printVerbose = true;
-                printf("printVerbose = %s\n", printVerbose ? "true" : "false");
+                // printf("printVerbose = %s\n", printVerbose ? "true" : "false");
                 break;
             case 't':
-                printf("t value\n");
+                traceEvents = true;
+                // printf("traceEvents = %s\n", traceEvents ? "true" : "false");
                 break;
             case 'e':
-                printf("e value\n");
+                displayEventQ = true;
+                // printf("displayEventQ = %s\n", displayEventQ ? "true" : "false");
                 break;
             case 'p':
-                printf("p value\n");
+                showPreemptDecision = true;
+                // printf("showPreemptDecision = %s\n", showPreemptDecision ? "true" : "false");
                 break;
             case 's':
             {
@@ -755,23 +783,28 @@ int main (int argc, char** argv)
                         scheduler = new FCFSScheduler();
                         break;
                     case 'L':
+                        scheduler = new LCFSScheduler();
                         break;
                     case 'S':
+                        scheduler = new SRTFScheduler();
                         break;
                     case 'R':
+                        // scheduler = new RRScheduler();
                         scheduler->quantum = quantum;
                         scheduler->maxprio = maxprio;
                         break;
                     case 'P':
+                        // scheduler = new PrioScheduler();
                         scheduler->quantum = quantum;
                         scheduler->maxprio = maxprio;
                         break;
                     case 'E':
+                        // scheduler = new PrePrioScheduler();
                         scheduler->quantum = quantum;
                         scheduler->maxprio = maxprio;
                         break;
                 }
-                printf("sched %c quantum %d maxprio %d\n", sched, quantum, maxprio);
+                // printf("sched %c quantum %d maxprio %d\n", sched, quantum, maxprio);
                 break;
             }
             case '?':
@@ -805,8 +838,8 @@ int main (int argc, char** argv)
         RFILE = argv[optind+1];
     }
 
-    printf("Input file: %s\n", INPUT_FILE.c_str());
-    printf("Random number file: %s\n", RFILE.c_str());
+    // printf("Input file: %s\n", INPUT_FILE.c_str());
+    // printf("Random number file: %s\n", RFILE.c_str());
 
     // Read random numbers
     ReadRandomNumbers();
