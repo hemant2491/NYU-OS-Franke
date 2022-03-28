@@ -61,8 +61,8 @@ Scheduler* scheduler;
 Process* currentRunningProcess;
 SCHEDULER_TYPE schedulerType;
 bool printVerbose = false;
-bool traceEvents = false;
-bool displayEventQ = false;
+bool traceRunQ = false;
+bool showEventQ = false;
 bool showPreemptDecision = false;
 
 class Process
@@ -77,7 +77,8 @@ class Process
         int dynamicPriority;
         PROCESS_STATE lastState, state, nextState;
         int activeBurst = 0;
-        int totalRunTime = 0;
+        // int totalRunTime = 0;
+        int remainingCPUTime = 0;
         int finishingTime = 0;
         int iOTime = 0;
         int cPUWaitingTime = 0;
@@ -94,6 +95,7 @@ class Process
     maxIOBurst(_maxIOBurst)
     {
         state = STATE_CREATED;
+        remainingCPUTime = _totalCPU;
     }
 
     void SetPriority(int _static, int _dynamic)
@@ -140,14 +142,16 @@ class Process
             next_state = STATE_BLOCKED;
         }
         // check if total CPU demand met and add transition to stop process
-        if (totalRunTime + runtime >= totalCPU)
+        // if (totalRunTime + runtime >= totalCPU)
+        if (runtime >= remainingCPUTime)
         {
-            runtime = totalCPU - totalRunTime;
+            runtime = remainingCPUTime;
             finishingTime = currentTS + runtime;
             trans = TRANS_TO_DONE;
             next_state = STATE_DONE;
         }
-        totalRunTime += runtime;
+        // totalRunTime += runtime;
+        remainingCPUTime -= runtime;
         lastRunTime = runtime;
         return {runtime, trans, next_state};
     }
@@ -203,22 +207,22 @@ class Event
                 break;
             case TRANS_TO_RUN:
                 {
-                    auto effectiveBurst = (proc->totalCPU - proc->totalRunTime) > proc->activeBurst ? proc->activeBurst : (proc->totalCPU - proc->totalRunTime);
+                    auto effectiveBurst = proc->remainingCPUTime > proc->activeBurst ? proc->activeBurst : proc->remainingCPUTime;
                     printf("%d %d %d: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, eventTime - proc->lastStateTransitionTS,
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
-                            effectiveBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
+                            effectiveBurst, proc->remainingCPUTime, proc->dynamicPriority);
                 
                 break;
                 }
             case TRANS_TO_BLOCK:
                 printf("%d %d %d: %s -> %s  ib=%d rem=%d\n", eventTime, proc->pid, proc->lastRunTime, 
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
-                            proc->iOBurst, proc->totalCPU - proc->totalRunTime);
+                            proc->iOBurst, proc->remainingCPUTime);
                 break;
             case TRANS_TO_PREEMPT:
                 printf("%d %d d: %s -> %s cb=%d rem=%d prio=%d\n", eventTime, proc->pid, proc->lastRunTime,
                             ProcessStateStrings[proc->state].c_str(), ProcessStateStrings[proc->nextState].c_str(),
-                            proc->activeBurst, proc->totalCPU - proc->totalRunTime, proc->dynamicPriority);
+                            proc->activeBurst, proc->remainingCPUTime, proc->dynamicPriority);
                 break;
             case TRANS_TO_DONE:
                 printf("%d %d %d: %s\n", eventTime, proc->pid, proc->lastRunTime, ProcessStateStrings[proc->nextState].c_str());
@@ -246,7 +250,7 @@ class FCFSScheduler : public Scheduler
             if(runQueue.size()==0){
                 return NULL;
             }
-            if(traceEvents)
+            if(traceRunQ)
             {
                 PrintRunQueue(runQueue);
             }
@@ -295,18 +299,25 @@ class LCFSScheduler : public Scheduler
 class SRTFScheduler : public Scheduler
 {
     private:
-        queue<Process*> runQueue;
+        deque<Process*> runQueue;
 
     public:
         const char* GetSchedulerInfo() { return "SRTF";}
         void AddProcess(Process* p)
         {
-            
+            int remainingTime = p->remainingCPUTime;
+            auto index = find_if(runQueue.begin(), runQueue.end(), [remainingTime] (auto proc)
+            {
+                return proc->remainingCPUTime > remainingTime;
+            });
+
+            runQueue.insert(index, p);
         }
         Process* GetNextProcess()
         {
+            if(runQueue.empty()) { return NULL;}
             Process* front = runQueue.front();
-            runQueue.pop();
+            runQueue.pop_front();
             return front;
         }
         bool TestPreempt(Process* p, int curtime) { return false;}
@@ -500,7 +511,7 @@ void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* proc)
     Event evt(eventTime, transition, proc);
     // printf("Adding event to queue - ");
     // evt.PrintVerbose();
-    if (displayEventQ)
+    if (showEventQ)
     {
         printf("AddEvent(");
         evt.Print();
@@ -509,7 +520,7 @@ void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* proc)
     }
     eventQueue.insert(index, evt);
 
-    if (displayEventQ)
+    if (showEventQ)
     {
         printf(" ==> ");
         PrintEventQueue();
@@ -758,12 +769,12 @@ int main (int argc, char** argv)
                 // printf("printVerbose = %s\n", printVerbose ? "true" : "false");
                 break;
             case 't':
-                traceEvents = true;
-                // printf("traceEvents = %s\n", traceEvents ? "true" : "false");
+                traceRunQ = true;
+                // printf("traceRunQ = %s\n", traceRunQ ? "true" : "false");
                 break;
             case 'e':
-                displayEventQ = true;
-                // printf("displayEventQ = %s\n", displayEventQ ? "true" : "false");
+                showEventQ = true;
+                // printf("showEventQ = %s\n", showEventQ ? "true" : "false");
                 break;
             case 'p':
                 showPreemptDecision = true;
