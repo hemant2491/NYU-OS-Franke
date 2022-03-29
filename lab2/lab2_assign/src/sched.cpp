@@ -157,6 +157,19 @@ class Process
         return {runtime, trans, next_state};
     }
 
+    int InterruptRun(int currentTime)
+    {
+        int effectiveRunTime = currentTime - lastStateTransitionTS;
+        lastStateTransitionTS = currentTime;
+        int unUsedCPUTime = (lastRunTime - effectiveRunTime);
+        activeBurst += unUsedCPUTime;
+        lastRunTime = effectiveRunTime;
+        remainingCPUTime += unUsedCPUTime;
+        nextState = STATE_READY;
+        finishingTime = 0;
+        return unUsedCPUTime;
+    } 
+
     int GetIOBurst()
     {
         iOBurst = GetRandom(maxIOBurst);
@@ -229,6 +242,7 @@ class Event
                 printf("%d %d %d: %s\n", eventTime, proc->pid, proc->lastRunTime, ProcessStateStrings[proc->nextState].c_str());
                 break;
         }
+        // cout << endl;
     }
 };
 
@@ -661,9 +675,15 @@ void UpdateIOUtilization(int start, int end)
     }
 }
 
-void UpdateDynamicPrio(Process* proc)
+void RemoveEventsForProcess(Process* p)
 {
-    
+    for (auto evtIter = eventQueue.begin(); evtIter != eventQueue.end(); evtIter++)
+    {
+        if (evtIter->proc->pid == p->pid)
+        {
+            eventQueue.erase(evtIter);
+        }
+    }
 }
 
 void UpdateRemainingIO()
@@ -703,6 +723,20 @@ void Simulation()
                 if(printVerbose) { event.PrintVerbose();}
                 proc->UpdateNextState(simulationCurrentTime, STATE_RUNNING);
                 proc->readytime = simulationCurrentTime;
+                if (Process* currP = currentRunningProcess; 
+                    currP != NULL 
+                    && (currP->lastStateTransitionTS + currP->lastRunTime > simulationCurrentTime)
+                    && scheduler->TestPreempt(proc, simulationCurrentTime) 
+                    && currP->dynamicPriority < proc->dynamicPriority)
+                {
+                    // cout << " current " << currP->pid << " prempting " << proc->pid << endl;
+                    int unUsedCPUTime = currP->InterruptRun(simulationCurrentTime);
+                    simulationCPUUtilization -= unUsedCPUTime;
+                    RemoveEventsForProcess(currP);
+                    // scheduler->AddProcess(currP);
+                    AddEventToQueue(simulationCurrentTime, TRANS_TO_PREEMPT, &(*currP));
+                    currentRunningProcess = NULL;
+                }
                 scheduler->AddProcess(&(*proc));
                 callScheduler = true;
                 break;
