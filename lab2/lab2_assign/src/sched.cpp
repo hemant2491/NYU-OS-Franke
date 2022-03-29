@@ -388,31 +388,22 @@ class PrioScheduler : public Scheduler
 
         void AddToQ(Process* p, vector <deque <Process*> >* q)
         {
-            // cout << "CCCCC process " << p->pid << " dp " << p->dynamicPriority << endl;
             int dp = p->dynamicPriority;
-            // auto index = find_if(q->begin(), q->end(), [dp] (auto proc)
-            // {
-            //     // cout << "Inside pred " << endl;
-            //     return proc->dynamicPriority < dp;
-            // });
+
             q->at(dp).push_back(p);
         }
 
         void AddProcess(Process* p)
         {
-            // cout << "MMMMM" << endl;
             if (p->dynamicPriority == -1)
             {
-                // cout << "AAAAA process " << p->pid << " expiredQueue " << endl;
                 p->dynamicPriority = p->staticPriority - 1;
                 AddToQ(p, expiredQueue);
             }
             else
             {
-                // cout << "BBBBB process " << p->pid << " runQueue " << endl;
                 AddToQ(p, runQueue);
             }
-            // cout << "Added" << endl;
         }
 
         Process* GetNextProcessIfNotEmpty()
@@ -439,13 +430,6 @@ class PrioScheduler : public Scheduler
                 SwapRunWithExpired();
                 proc = GetNextProcessIfNotEmpty();
             }
-
-            // cout << "EEEEE  " << endl;
-            // if(runQueue->empty()) { return NULL;}
-            // cout << "FFFFF  " << endl;
-            // Process* front = runQueue->front();
-            // runQueue->pop_front();
-            // cout << "GGGGGG  process " << front->pid << endl;
             return proc;
         }
         bool TestPreempt(Process* p, int curtime) { return false;}
@@ -508,12 +492,6 @@ void ReadRandomNumbers()
         randomValuesIter = randomValues.begin();
     }
 
-    // int count=0;
-    // for (auto iter = randomValues.begin(); iter != randomValues.end() ; iter++)
-    // {
-    //     count++;
-    //     printf("%d: '%d'\n", count, *iter);
-    // }
 }
 
 int GetRandom(int burst)
@@ -567,7 +545,6 @@ void AddEventToQueue(int eventTime, TRANSITION_TYPE transition, Process* proc)
     });
 
     Event evt(eventTime, transition, proc);
-    // cout << "IIIIII" << endl;
     // printf("Adding event to queue - ");
     // evt.PrintVerbose();
     if (printVerbose && showEventQ)
@@ -774,9 +751,7 @@ void Simulation()
             }
             case TRANS_TO_PREEMPT:
             { 
-                // cout << "trans to preempt proc " << proc->pid << " dp " << proc->dynamicPriority << endl;
                 if(printVerbose) { event.PrintVerbose();}
-                // cout << "LLLLL " << endl;
                 if (schedulerType == PRIO || schedulerType == PREPRIO)
                 {
                     proc->dynamicPriority -= 1;
@@ -789,7 +764,6 @@ void Simulation()
             }
             case TRANS_TO_DONE:
             {
-                // cout << "trans to done" << endl;
                 if(printVerbose) { event.PrintVerbose();}
                 // proc->UpdateNextState(simulationCurrentTime, STATE_DONE);
                 currentRunningProcess = NULL;
@@ -801,15 +775,12 @@ void Simulation()
 
         if (callScheduler)
         {
-            // cout << "JJJJJ " << endl;
             if (eventQueue.front().eventTime == simulationCurrentTime) { continue;}
-            // cout << "KKKKK " << endl;
             callScheduler = false;
             if (currentRunningProcess == NULL)
             {
                 Process* p = scheduler->GetNextProcess();
                 if (p == NULL) { continue;}
-                // cout << "HHHHH " << endl;
                 AddEventToQueue(simulationCurrentTime, TRANS_TO_RUN, p);
             }
         }
@@ -919,14 +890,12 @@ int main (int argc, char** argv)
                         scheduler = new PrioScheduler();
                         scheduler->quantum = quantum;
                         scheduler->SetMaxPrio(maxprio);
-                        // scheduler->maxprio = maxprio;
                         schedulerType = PRIO;
                         break;
                     case 'E':
                         scheduler = new PrePrioScheduler();
                         scheduler->quantum = quantum;
                         scheduler->SetMaxPrio(maxprio);
-                        // scheduler->maxprio = maxprio;
                         schedulerType = PREPRIO;
                         break;
                 }

@@ -1,6 +1,6 @@
 sched.cpp compiles and runs successfully with gcc/g++ version 9.2.0
 
-Please load module gcc-9.2 before comiling and running sched.cpp
+Please load module gcc-9.2 before compiling and running sched.cpp
 
 Please fire below command to compile and test provided sched.cpp: 
 $ module load gcc-9.2 
