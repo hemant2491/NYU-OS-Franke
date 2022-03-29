@@ -682,6 +682,10 @@ void RemoveEventsForProcess(Process* p)
         if (evtIter->proc->pid == p->pid)
         {
             eventQueue.erase(evtIter);
+            // cout << "Remove event for process " << evtIter->proc->pid << " ";
+            // evtIter->Print();
+            // cout << endl;
+            break;
         }
     }
 }
