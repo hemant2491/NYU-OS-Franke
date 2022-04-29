@@ -13,6 +13,7 @@
 #include <tuple>
 #include <map>
 #include <stdarg.h>
+#include <climits>
 
 
 using namespace std;
@@ -402,21 +403,21 @@ class ESCNRUPager : public Pager
                 frame_t* frame = &frameTable[currentHand];
                 nofScannedFrames++;
 
-                pte_t* pageTableEntry = NULL;
+                pte_t* page = NULL;
                 for (auto iter = allProcesses.begin(); iter != allProcesses.end(); iter++)
                 {
                     if (iter->pid == frame->pid)
                     {
-                        pageTableEntry = &(iter->pageTable[frame->vPageNumber]);
+                        page = &(iter->pageTable[frame->vPageNumber]);
                         break;
                     }
                 }
                 // Check for NULL PageTableEntry???
-                isReferenced = pageTableEntry->referenced == 1; 
-                isModified = pageTableEntry->modified == 1;
-                if(pageTableEntry->valid == 1 && shouldReset )
+                isReferenced = page->referenced == 1; 
+                isModified = page->modified == 1;
+                if(page->valid == 1 && shouldReset )
                 {
-                    pageTableEntry->referenced = 0;
+                    page->referenced = 0;
                 }
             
                 // Class 0
@@ -558,10 +559,81 @@ class WorkingSetPager : public Pager
     public:
         frame_t* select_victim_frame()
         {
-            frame_t* frame = &frameTable[hand];
+            int currentHand = -1;
+            frame_t* minFrame = &frameTable[hand];            
             
-            
+            int oldestFrameIndex = -1;
+            unsigned long long int oldestFrameValue = INT_MAX;
+            int oldestFrameIndexR = -1;
+            unsigned long long int oldestFrameValueR = INT_MAX;
+
+            while (currentHand != hand)
+            {
+                if (currentHand == -1) { currentHand = hand;}
+                frame_t* frame = &frameTable[currentHand];
+                
+                unsigned long long instructionPassed = inst_count - frame->instructionLastAccesed + 1;
+                bool shouldReset = false;
+                if(instructionPassed >= RESET_INSTRUCTION_COUNT)
+                {
+                    shouldReset = true;
+                }
+
+                pte_t* page = NULL;
+                for( auto iter = allProcesses.begin(); iter != allProcesses.end(); iter++)
+                {
+                    if (iter->pid == frame->pid)
+                    {
+                        page = &(iter->pageTable[frame->vPageNumber]);
+                    }
+                }
+                
+                if(shouldReset && page->referenced == 0){
+                    hand = currentHand;
+                    hand = IncrementHand(currentHand);
+                    return frame;
+                }
+
+                if(page->referenced == 1)
+                {
+                    frame->instructionLastAccesed = inst_count + 1;
+                }
+
+                if(frame->instructionLastAccesed < oldestFrameValue && page->referenced == 0)
+                {
+                    oldestFrameIndex = currentHand;
+                    oldestFrameValue = frame->instructionLastAccesed;
+                }
+                if(frame->instructionLastAccesed < oldestFrameValueR && page->referenced == 1)
+                {
+                    oldestFrameIndexR = currentHand;
+                    oldestFrameValueR = frame->instructionLastAccesed;
+                }
+                
+                page->referenced = 0;
+                                
+                currentHand = IncrementHand(currentHand);
+            }
+
+            if(oldestFrameIndex == -1)
+            {
+                hand = oldestFrameIndexR;
+                hand = IncrementHand(hand);
+                return &frameTable[oldestFrameIndexR];
+            }
+            else
+            {
+                hand = oldestFrameIndex;
+                hand = IncrementHand(hand);
+                return &frameTable[oldestFrameIndex];
+            }
+
             return NULL;
+        }
+
+        void resetLastAccessedForFrame(frame_t* frame)
+        {
+            frame->instructionLastAccesed = inst_count + 1;
         }
 };
 
