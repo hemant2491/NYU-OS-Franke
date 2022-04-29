@@ -562,9 +562,9 @@ class WorkingSetPager : public Pager
             int currentHand = -1;
             frame_t* minFrame = &frameTable[hand];            
             
-            int oldestFrameIndex = -1;
+            int lastFrameIndex = -1;
+            int lastFrameIndexRep = -1;
             unsigned long long int oldestFrameValue = INT_MAX;
-            int oldestFrameIndexR = -1;
             unsigned long long int oldestFrameValueR = INT_MAX;
 
             while (currentHand != hand)
@@ -573,10 +573,10 @@ class WorkingSetPager : public Pager
                 frame_t* frame = &frameTable[currentHand];
                 
                 unsigned long long instructionPassed = inst_count - frame->instructionLastAccesed + 1;
-                bool shouldReset = false;
+                bool moreThanTau = false;
                 if(instructionPassed >= RESET_INSTRUCTION_COUNT)
                 {
-                    shouldReset = true;
+                    moreThanTau = true;
                 }
 
                 pte_t* page = NULL;
@@ -588,7 +588,7 @@ class WorkingSetPager : public Pager
                     }
                 }
                 
-                if(shouldReset && page->referenced == 0){
+                if(moreThanTau && page->referenced == 0){
                     hand = currentHand;
                     hand = IncrementHand(currentHand);
                     return frame;
@@ -601,12 +601,12 @@ class WorkingSetPager : public Pager
 
                 if(frame->instructionLastAccesed < oldestFrameValue && page->referenced == 0)
                 {
-                    oldestFrameIndex = currentHand;
+                    lastFrameIndex = currentHand;
                     oldestFrameValue = frame->instructionLastAccesed;
                 }
                 if(frame->instructionLastAccesed < oldestFrameValueR && page->referenced == 1)
                 {
-                    oldestFrameIndexR = currentHand;
+                    lastFrameIndexRep = currentHand;
                     oldestFrameValueR = frame->instructionLastAccesed;
                 }
                 
@@ -615,17 +615,17 @@ class WorkingSetPager : public Pager
                 currentHand = IncrementHand(currentHand);
             }
 
-            if(oldestFrameIndex == -1)
+            if(lastFrameIndex == -1)
             {
-                hand = oldestFrameIndexR;
+                hand = lastFrameIndexRep;
                 hand = IncrementHand(hand);
-                return &frameTable[oldestFrameIndexR];
+                return &frameTable[lastFrameIndexRep];
             }
             else
             {
-                hand = oldestFrameIndex;
+                hand = lastFrameIndex;
                 hand = IncrementHand(hand);
-                return &frameTable[oldestFrameIndex];
+                return &frameTable[lastFrameIndex];
             }
 
             return NULL;
