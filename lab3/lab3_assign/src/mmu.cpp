@@ -385,7 +385,7 @@ class ESCNRUPager : public Pager
     
     public:
         
-        bool ScanAndResetFrames(bool shouldReset)
+        bool RetrunClass0AfterScanAndResetFrames(bool shouldReset)
         {
             int nofScannedFrames = 0;
             bool beginningOfScan = true;
@@ -394,11 +394,11 @@ class ESCNRUPager : public Pager
             bool isReferenced = false, isModified = false;
 
             victimFrameClass0 = victimFrameClass1 = victimFrameClass2 = victimFrameClass3 = NULL;
-            handClass0 = 0, handClass1 = 0, handClass2 = 0, handClass3 = 0;
+            handClass0 = handClass1 = handClass2 = handClass3 = 0;
 
             while (currentHand != endHand)
             {
-                if (currentHand == -1){ currentHand = hand;}
+                if (currentHand == -1) { currentHand = hand;}
                 frame_t* frame = &frameTable[currentHand];
                 nofScannedFrames++;
 
@@ -414,38 +414,46 @@ class ESCNRUPager : public Pager
                 // Check for NULL PageTableEntry???
                 isReferenced = pageTableEntry->referenced == 1; 
                 isModified = pageTableEntry->modified == 1;
-                if(pageTableEntry->valid == 1 && shouldReset ){
+                if(pageTableEntry->valid == 1 && shouldReset )
+                {
                     pageTableEntry->referenced = 0;
                 }
             
-                // class 0
-                if(!isReferenced && !isModified && victimFrameClass0 == NULL){
+                // Class 0
+                if(!isReferenced && !isModified && victimFrameClass0 == NULL)
+                {
                     victimFrameClass0 = frame;
                     handClass0 = currentHand;
-                    if(!shouldReset){
+                    if(!shouldReset)
+                    {
                         hand = currentHand;
-                        IncrementHand(hand);
+                        hand = IncrementHand(hand);
                         return true;
                     }
                 }
-                // class 1
-                if(!isReferenced && isModified && victimFrameClass1 == NULL){
+
+                // Class 1
+                if(!isReferenced && isModified && victimFrameClass1 == NULL)
+                {
                     victimFrameClass1 = frame;
                     handClass1 = currentHand;
                 }
-                // class 2
-                if(isReferenced && !isModified && victimFrameClass2 == NULL){
+
+                // Class 2
+                if(isReferenced && !isModified && victimFrameClass2 == NULL)
+                {
                     victimFrameClass2 = frame;
                     handClass2 = currentHand;
                 }
-                // class 3
-                if(isReferenced && isModified && victimFrameClass3 == NULL){
+
+                // Class 3
+                if(isReferenced && isModified && victimFrameClass3 == NULL)
+                {
                     victimFrameClass3 = frame;
                     handClass3 = currentHand;
                 }
 
                 currentHand = IncrementHand(currentHand);
-                return false;
             }
             return false;
         }
@@ -460,27 +468,31 @@ class ESCNRUPager : public Pager
                 lastReset = inst_count + 1;
             }
 
-            if (ScanAndResetFrames(shouldReset))
+            if (RetrunClass0AfterScanAndResetFrames(shouldReset))
             {
                 return victimFrameClass0;
             }
             
-            if(victimFrameClass0 != NULL){
+            if(victimFrameClass0 != NULL)
+            {
                 hand = handClass0;
                 hand = IncrementHand(hand);
                 return victimFrameClass0;
             }
-            if(victimFrameClass1 != NULL){
+            if(victimFrameClass1 != NULL)
+            {
                 hand = handClass1;
                 hand = IncrementHand(hand);
                 return victimFrameClass1;
             }
-            if(victimFrameClass2 != NULL){
+            if(victimFrameClass2 != NULL)
+            {
                 hand = handClass2;
                 hand = IncrementHand(hand);
                 return victimFrameClass2;
             }
-            if(victimFrameClass3 != NULL){
+            if(victimFrameClass3 != NULL)
+            {
                 hand = handClass3;
                 hand = IncrementHand(hand);
                 return victimFrameClass3;
@@ -999,7 +1011,8 @@ void Simulation()
                         printf("%llu: ==> %c %d\n", inst_count, 'r', value);
                     }
                     pte_t* pTE = &currentProcess->pageTable[value];
-                    if(!pTE->valid){
+                    if(!pTE->valid)
+                    {
                         // handle page fault
                         HandlePageFault(pTE, value);
                     }
@@ -1014,7 +1027,8 @@ void Simulation()
                         printf("%llu: ==> %c %d\n", inst_count, 'w', value);
                     }
                     pte_t* pTE = &currentProcess->pageTable[value];
-                    if(!pTE->valid){
+                    if(!pTE->valid)
+                    {
                         // handle page fault
                         HandlePageFault(pTE, value);
                     }
