@@ -350,15 +350,21 @@ class ClockPager : public Pager
             while(!victimFound)
             {
                 frame = &frameTable[index];
+                Process *p;
 
                 for (auto iter = allProcesses.begin(); iter != allProcesses.end(); iter++)
                 {
-                    if (iter->pid == frame->pid && iter->pageTable[frame->vPageNumber].referenced == 1)
+                    if (iter->pid == frame->pid)
                     {
-                        victimFound = true;
+                        if (iter->pageTable[frame->vPageNumber].referenced != 1)
+                        {
+                            victimFound = true;
+                        }
+                        iter->pageTable[frame->vPageNumber].referenced = 0;
                         break;
                     }
                 }
+
                 index++;
                 if(index == totalFrames)
                 {
@@ -621,7 +627,7 @@ int GetRandom(int burst)
     nextRandom = *randomValuesIter;
     randomValuesIter++;
 
-    return (1 + (nextRandom % burst));
+    return (nextRandom % burst);
 }
 
 void ParseCommandLineOptions (int argc, char** argv)
@@ -896,13 +902,13 @@ void HandlePageFault(pte_t* pageTableEntry, int vPageNumber)
         currentProcess->PrintMAP(frame->frameAddress);
         frame->age = 0;
         pager->ClearFrameLastAcessed(frame);
-        frame->pid = currentProcess->pid;
-        frame->vPageNumber = vPageNumber;
-
         currentPTE->modified = 0;
         currentPTE->referenced = 0;
         currentPTE->valid = 1;
         currentPTE->frameAddress = frame->frameAddress;
+
+        frame->pid = currentProcess->pid;
+        frame->vPageNumber = vPageNumber;
     }
     else
     {
@@ -1044,21 +1050,29 @@ void PrintPageTable()
 
         for(int i=0; i < MAX_VPAGES; i++)
         {
-            if(processPageTable[i].valid == 0){
-                    if(processPageTable[i].pagedOut== 1){
-                        printf(" #");
-                    }else if(processPageTable[i].fileMapped== 0){
-                        printf(" *");
-                    } else {
-                        printf(" *");
-                    }
-                } else {
-                    printf(" %d:%c%c%c",i,
-                        (processPageTable[i].referenced == 1) ? 'R' : '-',
-                        (processPageTable[i].modified == 1)   ? 'M' : '-',
-                        (processPageTable[i].pagedOut == 1)   ? 'S' : '-'
-                    );
+            if(processPageTable[i].valid == 0)
+            {
+                if(processPageTable[i].pagedOut == 1)
+                {
+                    printf(" #");
                 }
+                else if(processPageTable[i].fileMapped == 0)
+                {
+                    printf(" *");
+                }
+                else
+                {
+                    printf(" *");
+                }
+            }
+            else
+            {
+                printf(" %d:%c%c%c",i,
+                    (processPageTable[i].referenced == 1) ? 'R' : '-',
+                    (processPageTable[i].modified == 1) ? 'M' : '-',
+                    (processPageTable[i].pagedOut == 1) ? 'S' : '-'
+                );
+            }
         }
         printf("\n");
     }
