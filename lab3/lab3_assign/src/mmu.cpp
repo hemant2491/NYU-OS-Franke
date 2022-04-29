@@ -540,11 +540,11 @@ class AgingPager : public Pager
                     minIndex = currentHand;
                 }
 
-                IncrementHand(currentHand);
+                currentHand = IncrementHand(currentHand);
             }
 
             hand = minIndex;
-            IncrementHand(hand);
+            hand = IncrementHand(hand);
             return &frameTable[minIndex];
         }
 };
