@@ -34,8 +34,8 @@ IOScheduler* scheduler;
 vector<IOOperation> allOperations;
 long int total_time;
 long int tot_movement;
-long int avg_turnaround;
-long int avg_waittime;
+double avg_turnaround;
+double avg_waittime;
 long int max_waittime;
 bool isIOActive = false;
 
@@ -49,6 +49,7 @@ inline std::string trim(const std::string& line)
 class IOOperation
 {
     public:
+        long int id = -1;
         long int arrival_time = 0;
         long int track = 0;
         long int start_time = 0;
@@ -58,10 +59,11 @@ class IOOperation
         long int waitTime = 0;
     
     public:
-        IOOperation(long int ist, long int trk)
+        IOOperation(long int ist, long int trk, long int _id)
         {
             arrival_time = ist;
             track = trk;
+            id = _id;
         }
 };
 
@@ -70,7 +72,7 @@ class IOScheduler
     public:
         virtual void AddRequest(IOOperation* operation) {};
         virtual IOOperation* GetOperation() { return NULL;};
-        virtual bool IsIdle() { return false;};
+        virtual bool IsFinished() { return false;};
 
 };
 
@@ -99,7 +101,7 @@ class FIFOIOScheduler : public IOScheduler
             }
         }
         
-        bool IsIdle()
+        bool IsFinished()
         {
             return operationsQueue.empty();
         }
@@ -230,6 +232,7 @@ void ReadIOOperationInput()
         exit(1);
     }
 
+    long int i = 0;
     while (fin)
     {
         while(getline(fin, line))
@@ -238,7 +241,8 @@ void ReadIOOperationInput()
             if(line[0] != '#')
             {
                 sscanf(line.c_str(), "%ld %ld", &issueTime, &track);
-                allOperations.push_back(IOOperation(issueTime, track));
+                allOperations.push_back(IOOperation(issueTime, track,i));
+                i++;
                 break;
             }
         }
@@ -249,40 +253,54 @@ void ReadIOOperationInput()
 
 void Simulation()
 {
-    auto currentOperation = allOperations.begin();
+    auto remainingOperation = allOperations.begin();
+    IOOperation* currentOperation = NULL;
     int currentTime = 0;
     int currentHead = 0;
-    bool hasTrackMoved = false;
     bool isIOActive = false;
     int direction = 0;
+    // cout << "Sim Start" << endl;
     while (true)
     {
         // if a new I/O arrived to the system at this current time
-        if(currentOperation != allOperations.end() && currentOperation->arrival_time == currentTime)
+        if(remainingOperation != allOperations.end() && remainingOperation->arrival_time == currentTime)
         {
             // → add request to IO-queue
-            scheduler->AddRequest(&(*currentOperation));
-            currentOperation++;
+            scheduler->AddRequest(&(*remainingOperation));
+            if(verboseOption)
+            {
+                printf("%d:\t%d add %d\n", currentTime, remainingOperation->id, remainingOperation->track);
+            }
+            // cout << endl;
+            remainingOperation++;
         }
         // if an IO is active and completed at this time
         if (isIOActive && currentOperation->end_time == currentTime)
         {
             // → Compute relevant info and store in IO request for final summary if no IO request active now
+            if(verboseOption)
+            {
+                printf("%d:\t%d finish %d\n", currentTime, currentOperation->id, (currentOperation->end_time - currentOperation->arrival_time));
+            }
+            // cout << endl;
             isIOActive = false;
+            currentOperation = NULL;
+            direction = 0;
         }
         // if requests are pending
-        if(!isIOActive && !scheduler->IsIdle())
+        if(!isIOActive && !scheduler->IsFinished())
         {
             // → Fetch the next request from IO-queue and start the new IO.
-            IOOperation* op = scheduler->GetOperation();
-            op->waitTime = currentTime - op->arrival_time;
-            op->start_time = currentTime;
-            op->end_time = abs(op->track - currentHead);
-            if (op->track > currentHead)
+            // IOOperation* op = scheduler->GetOperation();
+            currentOperation = &(*scheduler->GetOperation());
+            currentOperation->waitTime = currentTime - currentOperation->arrival_time;
+            currentOperation->start_time = currentTime;
+            currentOperation->end_time = currentTime + abs(currentOperation->track - currentHead);
+            if (currentOperation->track > currentHead)
             {
                 direction = 1;
             }
-            else if (op->track < currentHead)
+            else if (currentOperation->track < currentHead)
             {
                 direction = -1;
             }
@@ -291,9 +309,14 @@ void Simulation()
                 direction = 0;
             }
             isIOActive = true;
+            if(verboseOption)
+            {
+                printf("%d:\t%d issue %d %d\n", currentTime, currentOperation->id, currentOperation->track, currentHead);
+            }
+            // cout << endl;
         }
         // else if all IO from input file processed
-        if (currentOperation == allOperations.end() && scheduler->IsIdle())
+        if (!isIOActive && remainingOperation == allOperations.end() && scheduler->IsFinished())
         {
             // → exit simulation
             break;
@@ -307,11 +330,15 @@ void Simulation()
             tot_movement++;
         }
         // Increment time by 1
-        if (hasTrackMoved)
-        {
-            currentTime++;
-            total_time++;
-        }
+        // if (isIOActive)
+        // {
+        //     currentTime++;
+        //     total_time++;
+        // }
+        currentTime++;
+        total_time++;
+
+        // cout << "Sim time " << currentTime << endl;
 
     }
     // */
@@ -326,7 +353,7 @@ void PrintSummary()
         // - its disk service start time
         // - its disk service end time
     
-    int i = 0;
+    long int i = 0;
     long int total_wait_time = 0;
     long int total_turn_around_time = 0;
     for (auto iter = allOperations.begin(); iter != allOperations.end(); iter++)
@@ -338,8 +365,8 @@ void PrintSummary()
         i++;
     }
 
-    avg_turnaround = total_turn_around_time / i;
-    avg_waittime = total_wait_time / i;
+    avg_turnaround = (double)total_turn_around_time / i;
+    avg_waittime = (double)total_wait_time / i;
 
     // printf("SUM: %d %d %.2lf %.2lf %d\n",
     // total_time, tot_movement, avg_turnaround, avg_waittime, max_waittime);
