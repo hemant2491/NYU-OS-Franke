@@ -71,7 +71,7 @@ class IOScheduler
 {
     public:
         virtual void AddRequest(IOOperation* operation) {};
-        virtual IOOperation* GetOperation() { return NULL;};
+        virtual IOOperation* GetOperation(long int current_head, long int last_direction) { return NULL;};
         virtual bool IsFinished() { return false;};
 
 };
@@ -87,7 +87,7 @@ class FIFOIOScheduler : public IOScheduler
             operationsQueue.push_back(operation);
         }
 
-        IOOperation* GetOperation()
+        IOOperation* GetOperation(long int current_head, long int last_direction)
         {
             if (operationsQueue.empty())
             {
@@ -107,23 +107,294 @@ class FIFOIOScheduler : public IOScheduler
         }
 };
 
-class SSTFIOScheduler : public FIFOIOScheduler
+class SSTFIOScheduler : public IOScheduler
 {
+    private:
+        deque<IOOperation*> operationsQueue;
+    
+    public:
+        void AddRequest(IOOperation* operation)
+        {
+            operationsQueue.push_back(operation);
+        }
+
+        IOOperation* GetOperation(long int current_head, long int last_direction)
+        {
+            if (operationsQueue.empty())
+            {
+                return NULL;
+            }
+            else
+            {
+                long int minDist = INT_MAX;
+                auto popIter = operationsQueue.begin();
+                for (auto iter = operationsQueue.begin(); iter != operationsQueue.end(); iter++)
+                {
+                    long int dist = abs((*iter)->track - current_head);
+                    if (minDist > dist)
+                    {
+                        minDist = dist;
+                        popIter = iter;
+                    }
+                }
+                
+                IOOperation* op = *popIter;
+                operationsQueue.erase(popIter);
+                return op;
+            }
+        }
+        
+        bool IsFinished()
+        {
+            return operationsQueue.empty();
+        }
 
 };
 
-class LOOKIOScheduler : public FIFOIOScheduler
+class LOOKIOScheduler : public IOScheduler
 {
+    private:
+        deque<IOOperation*> operationsQueue;
+
+    public:
+        void AddRequest(IOOperation* operation)
+        {
+            operationsQueue.push_back(operation);
+        }
+
+        IOOperation* GetOperation(long int current_head, long int last_direction)
+        {
+            if (operationsQueue.empty())
+            {
+                return NULL;
+            }
+
+            IOOperation* op = NULL;
+
+            auto closestPosIter = operationsQueue.begin();
+            auto closestNegIter = operationsQueue.begin();
+
+            long int minPosDist = INT_MAX;
+            long int minNegDist = INT_MAX;
+
+            bool posFound = false;
+            bool negFound = false;
+
+            for (auto iter = operationsQueue.begin(); iter != operationsQueue.end(); iter++)
+            {
+                if ((*iter)->track >= current_head)
+                {
+                    posFound = true;
+                    long int pDist = (*iter)->track - current_head;
+                    if (pDist <= minPosDist)
+                    {
+                        minPosDist = pDist;
+                        closestPosIter = iter;
+                    }
+                }
+
+                if ((*iter)->track <= current_head)
+                {
+                    negFound = true;
+                    long int nDist =  current_head - (*iter)->track;
+                    if (nDist <= minNegDist)
+                    {
+                        minNegDist = nDist;
+                        closestNegIter = iter;
+                    }
+                }
+            }
+
+            if(last_direction > 0 && posFound)
+            {
+                op = *closestPosIter;
+                operationsQueue.erase(closestPosIter);
+            }
+            else if(last_direction > 0 && !posFound)
+            {
+                op = *closestNegIter;
+                operationsQueue.erase(closestNegIter);
+            }
+            if(last_direction < 0 && negFound)
+            {
+                op = *closestNegIter;
+                operationsQueue.erase(closestNegIter);
+            }
+            else if(last_direction < 0 && !negFound)
+            {
+                op = *closestPosIter;
+                operationsQueue.erase(closestPosIter);
+            }
+
+            return op;
+        }
+
+        bool IsFinished()
+        {
+            return operationsQueue.empty();
+        }
 
 };
 
-class CLOOKIOScheduler : public FIFOIOScheduler
+class CLOOKIOScheduler : public IOScheduler
 {
+    private:
+        deque<IOOperation*> operationsQueue;
+
+    public:
+        void AddRequest(IOOperation* operation)
+        {
+            operationsQueue.push_back(operation);
+        }
+
+        IOOperation* GetOperation(long int current_head, long int last_direction)
+        {
+            if (operationsQueue.empty())
+            {
+                return NULL;
+            }
+
+            IOOperation* op = NULL;
+
+            auto closestPosIter = operationsQueue.begin();
+            auto smallestTrackIter = operationsQueue.begin();
+
+            long int minPosDist = INT_MAX;
+            long int smallestTrack = INT_MAX;
+
+            bool posFound = false;
+            // bool negFound = false;
+
+            for (auto iter = operationsQueue.begin(); iter != operationsQueue.end(); iter++)
+            {
+                if ((*iter)->track >= current_head)
+                {
+                    posFound = true;
+                    long int pDist = (*iter)->track - current_head;
+                    if (pDist <= minPosDist)
+                    {
+                        minPosDist = pDist;
+                        closestPosIter = iter;
+                    }
+                }
+
+                if ((*iter)->track <= smallestTrack)
+                {
+                    smallestTrackIter = iter;
+                }
+            }
+
+            if(posFound)
+            {
+                op = *closestPosIter;
+                operationsQueue.erase(closestPosIter);
+            }
+            else
+            {
+                op = *smallestTrackIter;
+                operationsQueue.erase(smallestTrackIter);
+            }
+
+            return op;
+        }
+
+        bool IsFinished()
+        {
+            return operationsQueue.empty();
+        }
 
 };
 
-class FLOOKIOScheduler : public FIFOIOScheduler
+class FLOOKIOScheduler : public IOScheduler
 {
+    private:
+        deque<IOOperation*> *operationsQueueAdd = new deque<IOOperation*>();
+        deque<IOOperation*> *operationsQueueActive = new deque<IOOperation*>();
+
+    public:
+        void AddRequest(IOOperation* operation)
+        {
+            operationsQueueAdd->push_back(operation);
+        }
+
+        IOOperation* GetOperation(long int current_head, long int last_direction)
+        {
+            if (operationsQueueAdd->empty() && operationsQueueActive->empty())
+            {
+                return NULL;
+            }
+
+            if(operationsQueueActive->empty())
+            {
+                deque<IOOperation*> *tempOperationsQueue = operationsQueueActive;
+                operationsQueueActive = operationsQueueAdd;
+                operationsQueueAdd = tempOperationsQueue;
+            }
+
+            IOOperation* op = NULL;
+            
+            auto closestPosIter = operationsQueueActive->begin();
+            auto closestNegIter = operationsQueueActive->begin();
+
+            long int minPosDist = INT_MAX;
+            long int minNegDist = INT_MAX;
+
+            bool posFound = false;
+            bool negFound = false;
+
+            for (auto iter = operationsQueueActive->begin(); iter != operationsQueueActive->end(); iter++)
+            {
+                if ((*iter)->track >= current_head)
+                {
+                    posFound = true;
+                    long int pDist = (*iter)->track - current_head;
+                    if (pDist <= minPosDist)
+                    {
+                        minPosDist = pDist;
+                        closestPosIter = iter;
+                    }
+                }
+
+                if ((*iter)->track <= current_head)
+                {
+                    negFound = true;
+                    long int nDist =  current_head - (*iter)->track;
+                    if (nDist <= minNegDist)
+                    {
+                        minNegDist = nDist;
+                        closestNegIter = iter;
+                    }
+                }
+            }
+
+            if(last_direction > 0 && posFound)
+            {
+                op = *closestPosIter;
+                operationsQueueActive->erase(closestPosIter);
+            }
+            else if(last_direction > 0 && !posFound)
+            {
+                op = *closestNegIter;
+                operationsQueueActive->erase(closestNegIter);
+            }
+            if(last_direction < 0 && negFound)
+            {
+                op = *closestNegIter;
+                operationsQueueActive->erase(closestNegIter);
+            }
+            else if(last_direction < 0 && !negFound)
+            {
+                op = *closestPosIter;
+                operationsQueueActive->erase(closestPosIter);
+            }
+
+            return op;
+        }
+
+        bool IsFinished()
+        {
+            return (operationsQueueAdd->empty() && operationsQueueActive->empty());
+        }
 
 };
 
@@ -255,10 +526,11 @@ void Simulation()
 {
     auto remainingOperation = allOperations.begin();
     IOOperation* currentOperation = NULL;
-    int currentTime = 0;
-    int currentHead = 0;
+    long int currentHead = 0;
+    long int currentTime = 0;
     bool isIOActive = false;
-    int direction = 0;
+    long int direction = 0;
+    long int lastDirection = 0;
     // cout << "Sim Start" << endl;
     while (true)
     {
@@ -285,6 +557,7 @@ void Simulation()
             // cout << endl;
             isIOActive = false;
             currentOperation = NULL;
+            lastDirection = direction;
             direction = 0;
         }
         // if requests are pending
@@ -292,10 +565,11 @@ void Simulation()
         {
             // → Fetch the next request from IO-queue and start the new IO.
             // IOOperation* op = scheduler->GetOperation();
-            currentOperation = &(*scheduler->GetOperation());
+            currentOperation = &(*scheduler->GetOperation(currentHead, lastDirection));
             currentOperation->waitTime = currentTime - currentOperation->arrival_time;
             currentOperation->start_time = currentTime;
             currentOperation->end_time = currentTime + abs(currentOperation->track - currentHead);
+            isIOActive = true;
             if (currentOperation->track > currentHead)
             {
                 direction = 1;
@@ -307,8 +581,10 @@ void Simulation()
             else
             {
                 direction = 0;
+                isIOActive = false;
+                continue;
             }
-            isIOActive = true;
+            
             if(verboseOption)
             {
                 printf("%d:\t%d issue %d %d\n", currentTime, currentOperation->id, currentOperation->track, currentHead);
