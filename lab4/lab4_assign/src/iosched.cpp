@@ -332,8 +332,8 @@ class FLOOKIOScheduler : public IOScheduler
 
             IOOperation* op = NULL;
             
-            auto closestPosIter = operationsQueueActive->begin();
-            auto closestNegIter = operationsQueueActive->begin();
+            auto closestPosIter = operationsQueueActive->rbegin();
+            auto closestNegIter = operationsQueueActive->rbegin();
 
             long int minPosDist = INT_MAX;
             long int minNegDist = INT_MAX;
@@ -341,7 +341,7 @@ class FLOOKIOScheduler : public IOScheduler
             bool posFound = false;
             bool negFound = false;
 
-            for (auto iter = operationsQueueActive->begin(); iter != operationsQueueActive->end(); iter++)
+            for (auto iter = operationsQueueActive->rbegin(); iter != operationsQueueActive->rend(); iter++)
             {
                 if ((*iter)->track >= current_head)
                 {
@@ -369,22 +369,22 @@ class FLOOKIOScheduler : public IOScheduler
             if(last_direction > 0 && posFound)
             {
                 op = *closestPosIter;
-                operationsQueueActive->erase(closestPosIter);
+                operationsQueueActive->erase(next(closestPosIter).base());
             }
             else if(last_direction > 0 && !posFound)
             {
                 op = *closestNegIter;
-                operationsQueueActive->erase(closestNegIter);
+                operationsQueueActive->erase(next(closestNegIter).base());
             }
             if(last_direction < 0 && negFound)
             {
                 op = *closestNegIter;
-                operationsQueueActive->erase(closestNegIter);
+                operationsQueueActive->erase(next(closestNegIter).base());
             }
             else if(last_direction < 0 && !negFound)
             {
                 op = *closestPosIter;
-                operationsQueueActive->erase(closestPosIter);
+                operationsQueueActive->erase(next(closestPosIter).base());
             }
 
             return op;
