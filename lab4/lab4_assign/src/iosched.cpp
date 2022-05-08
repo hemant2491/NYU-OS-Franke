@@ -54,8 +54,6 @@ class IOOperation
         long int track = 0;
         long int start_time = 0;
         long int end_time = 0;
-
-        long int scheduledTime = 0;
         long int waitTime = 0;
     
     public:
@@ -171,8 +169,8 @@ class LOOKIOScheduler : public IOScheduler
 
             IOOperation* op = NULL;
 
-            auto closestPosIter = operationsQueue.begin();
-            auto closestNegIter = operationsQueue.begin();
+            auto closestPosIter = operationsQueue.rbegin();
+            auto closestNegIter = operationsQueue.rbegin();
 
             long int minPosDist = INT_MAX;
             long int minNegDist = INT_MAX;
@@ -180,7 +178,7 @@ class LOOKIOScheduler : public IOScheduler
             bool posFound = false;
             bool negFound = false;
 
-            for (auto iter = operationsQueue.begin(); iter != operationsQueue.end(); iter++)
+            for (auto iter = operationsQueue.rbegin(); iter != operationsQueue.rend(); iter++)
             {
                 if ((*iter)->track >= current_head)
                 {
@@ -208,22 +206,22 @@ class LOOKIOScheduler : public IOScheduler
             if(last_direction > 0 && posFound)
             {
                 op = *closestPosIter;
-                operationsQueue.erase(closestPosIter);
+                operationsQueue.erase(next(closestPosIter).base());
             }
             else if(last_direction > 0 && !posFound)
             {
                 op = *closestNegIter;
-                operationsQueue.erase(closestNegIter);
+                operationsQueue.erase(next(closestNegIter).base());
             }
             if(last_direction < 0 && negFound)
             {
                 op = *closestNegIter;
-                operationsQueue.erase(closestNegIter);
+                operationsQueue.erase(next(closestNegIter).base());
             }
             else if(last_direction < 0 && !negFound)
             {
                 op = *closestPosIter;
-                operationsQueue.erase(closestPosIter);
+                operationsQueue.erase(next(closestPosIter).base());
             }
 
             return op;
@@ -530,7 +528,7 @@ void Simulation()
     long int currentTime = 0;
     bool isIOActive = false;
     long int direction = 0;
-    long int lastDirection = 0;
+    long int lastDirection = 1;
     // cout << "Sim Start" << endl;
     while (true)
     {
@@ -556,20 +554,21 @@ void Simulation()
             }
             // cout << endl;
             isIOActive = false;
-            currentOperation = NULL;
-            lastDirection = direction;
-            direction = 0;
+            // currentOperation = NULL;
+            // lastDirection = direction;
+            // direction = 0;
         }
         // if requests are pending
         if(!isIOActive && !scheduler->IsFinished())
         {
             // → Fetch the next request from IO-queue and start the new IO.
             // IOOperation* op = scheduler->GetOperation();
+            isIOActive = true;
             currentOperation = &(*scheduler->GetOperation(currentHead, lastDirection));
             currentOperation->waitTime = currentTime - currentOperation->arrival_time;
             currentOperation->start_time = currentTime;
             currentOperation->end_time = currentTime + abs(currentOperation->track - currentHead);
-            isIOActive = true;
+
             if (currentOperation->track > currentHead)
             {
                 direction = 1;
@@ -581,8 +580,13 @@ void Simulation()
             else
             {
                 direction = 0;
-                isIOActive = false;
-                continue;
+                // isIOActive = false;
+                // continue;
+            }
+
+            if (direction != 0)
+            {
+                lastDirection = direction;
             }
             
             if(verboseOption)
@@ -592,10 +596,14 @@ void Simulation()
             // cout << endl;
         }
         // else if all IO from input file processed
-        if (!isIOActive && remainingOperation == allOperations.end() && scheduler->IsFinished())
+        else if(!isIOActive && (remainingOperation == allOperations.end()) && scheduler->IsFinished())
         {
             // → exit simulation
             break;
+        }
+        else if(!isIOActive)
+        {
+            direction = lastDirection;
         }
         
         // if an IO is active
@@ -603,16 +611,20 @@ void Simulation()
         {
             // → Move the head by one unit in the direction its going (to simulate seek)
             currentHead += direction;
-            tot_movement++;
+            if (direction != 0)
+            {
+                tot_movement++;
+            }
         }
         // Increment time by 1
-        // if (isIOActive)
-        // {
-        //     currentTime++;
-        //     total_time++;
-        // }
-        currentTime++;
-        total_time++;
+        // currentTime++;
+        // total_time++;
+        if (direction != 0)
+        {
+            currentTime++;
+            total_time++;
+            // cout << currentTime << " : " << total_time << endl;
+        }
 
         // cout << "Sim time " << currentTime << endl;
 
