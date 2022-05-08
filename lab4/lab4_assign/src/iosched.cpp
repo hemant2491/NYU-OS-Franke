@@ -254,8 +254,8 @@ class CLOOKIOScheduler : public IOScheduler
 
             IOOperation* op = NULL;
 
-            auto closestPosIter = operationsQueue.begin();
-            auto smallestTrackIter = operationsQueue.begin();
+            auto closestPosIter = operationsQueue.rbegin();
+            auto smallestTrackIter = operationsQueue.rbegin();
 
             long int minPosDist = INT_MAX;
             long int smallestTrack = INT_MAX;
@@ -263,7 +263,7 @@ class CLOOKIOScheduler : public IOScheduler
             bool posFound = false;
             // bool negFound = false;
 
-            for (auto iter = operationsQueue.begin(); iter != operationsQueue.end(); iter++)
+            for (auto iter = operationsQueue.rbegin(); iter != operationsQueue.rend(); iter++)
             {
                 if ((*iter)->track >= current_head)
                 {
@@ -279,18 +279,19 @@ class CLOOKIOScheduler : public IOScheduler
                 if ((*iter)->track <= smallestTrack)
                 {
                     smallestTrackIter = iter;
+                    smallestTrack = (*iter)->track;
                 }
             }
 
             if(posFound)
             {
                 op = *closestPosIter;
-                operationsQueue.erase(closestPosIter);
+                operationsQueue.erase(next(closestPosIter).base());
             }
             else
             {
                 op = *smallestTrackIter;
-                operationsQueue.erase(smallestTrackIter);
+                operationsQueue.erase(next(smallestTrackIter).base());
             }
 
             return op;
